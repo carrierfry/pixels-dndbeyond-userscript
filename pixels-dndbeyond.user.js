@@ -1,13 +1,15 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.1
+// @version      0.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=https://gamewithpixels.com/
 // @run-at       document-start
 // @grant        none
+// @updateURL    https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js
+// @downloadURL  https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js
 // @require      https://unpkg.com/@systemic-games/pixels-web-connect@1.1.1/dist/umd/index.js
 // ==/UserScript==
 
