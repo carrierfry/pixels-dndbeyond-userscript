@@ -1,12 +1,12 @@
 # Pixels DnD Beyond integration
 
-This is a userscript that integrates Pixels into DnD Beyond.
+This is a userscript that integrates [Pixels](https://gamewithpixels.com/) into [DnD Beyond](https://www.dndbeyond.com/) by making it possible to throw pixel dice and submit the result to DnD Beyond.
 
 You can run it with [Tampermonkey](https://www.tampermonkey.net/).
 
 ## Features
 - Can connect to Pixel dice
-- Can identify a roll with a Pixel die and submmit it to DnD Beyond
+- Can identify a roll with a Pixel die and submit it to DnD Beyond
 
 ## Todos / Things that need to be implemented
 - [ ] Support other dice than D20s
@@ -15,7 +15,7 @@ You can run it with [Tampermonkey](https://www.tampermonkey.net/).
 - [ ] Show the roll to the user (currently only the other players can see it)
 
 ## Known bugs
-- Currently, the script only works if you open the character sheet in DnD Beyond directly (for example by reloading the page). If you open the character sheet via the overlay, it won't work. (This is because DnD BEyond is a single site application and the script only runs once when the page is loaded.)
+- Currently, the script only works if you open the character sheet in DnD Beyond directly (for example by reloading the page). If you open the character sheet by clicking on `view` in your campaign or character overwie, it won't work. (This is because DnD Beyond is a single site application and the script only runs once when the page is loaded.)
 
 ## How to use
 1. Install [Tampermonkey](https://www.tampermonkey.net/)
