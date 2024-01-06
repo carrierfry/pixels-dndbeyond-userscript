@@ -18,7 +18,7 @@ You can run it with [Tampermonkey](https://www.tampermonkey.net/).
 - Currently, the script only works if you open the character sheet in DnD Beyond directly (for example by reloading the page). If you open the character sheet by clicking on `view` in your campaign or character overwie, it won't work. (This is because DnD Beyond is a single site application and the script only runs once when the page is loaded.)
 
 ## How to use
-1. Install [Tampermonkey](https://www.tampermonkey.net/)
+1. Install [Tampermonkey](https://www.tampermonkey.net/) into your browser (chromium based browsers like Chrome or Edge should work)
 2. Install the script by clicking [here](https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js) and clicking on `Install script`
 3. Open a character sheet in DnD Beyond
 4. Click on the `Connect to Pixels` button at the top and connect to your Pixel dice
