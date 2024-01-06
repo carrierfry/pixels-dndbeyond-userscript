@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.2
+// @version      0.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -117,6 +117,7 @@ const diceMessageRolled = {
     "messageTarget": "1234567"
 }
 
+// Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
 const nativeWebSocket = window.WebSocket;
 window.WebSocket = function (...args) {
@@ -131,6 +132,7 @@ window.WebSocket = function (...args) {
 
 setTimeout(main, 1000);
 
+// Main function
 function main() {
     if (!socket || socket.readyState !== 1) {
         console.log("socket not ready");
@@ -141,6 +143,7 @@ function main() {
     addPixelsLogoButton();
 }
 
+// generates a random hex string of the given length
 function generateRandomHex(length) {
     let result = '';
     const characters = '0123456789abcdef';
@@ -150,10 +153,14 @@ function generateRandomHex(length) {
     return result;
 }
 
+// DnD Beyond uses a UUID for the rollId and messageId. That gets generated here
 function generateDnDBeyondId() {
     return generateRandomHex(8) + "-" + generateRandomHex(4) + "-" + generateRandomHex(4) + "-" + generateRandomHex(4) + "-" + generateRandomHex(12);
 }
 
+// There are two messages that need to be sent to the server to roll a die. The first is the initial message, the second is the rolled message.
+// The initial message is sent with a random rollId, the rolled message is sent with the same rollId as the initial message.
+// These 2 functions build the JSON for those messages.
 function buildInitialJson() {
     let json = JSON.parse(JSON.stringify(diceMessageInitial));
     json.id = generateDnDBeyondId();
@@ -190,6 +197,7 @@ function buildRolledJson(rollId, dieValue) {
     return json;
 }
 
+// Adds a button that lets you connect to Pixels
 function addPixelsLogoButton() {
     let button = document.createElement("li");
     button.className = "mm-nav-item";
@@ -200,7 +208,7 @@ function addPixelsLogoButton() {
     // prevent the link from navigating
     link.href = "#";
     // prevent default click behavior
-    link.innerText = "Pixels";
+    link.innerText = "Connect to Pixels";
     link.onclick = (e) => {
         e.preventDefault();
         console.log("Pixels link clicked");
@@ -215,6 +223,7 @@ function addPixelsLogoButton() {
     lastNavItem.parentNode.insertBefore(button, lastNavItem.nextSibling);
 }
 
+// The following 5 functions get different information from DOM elements and the URL
 function getCharacterId() {
     let url = window.location.href;
     let urlParts = url.split("/");
@@ -242,7 +251,10 @@ function getAvatarUrl() {
     return avatar;
 }
 
+// "Rolls" a die. You can specify the dice type and value and it will send the appropriate messages to the server.
 function rollDice(diceType, value) {
+    // Also here needs to be more work done to support other dice types
+
     let initJson = buildInitialJson();
     socket.send(JSON.stringify(initJson));
 
@@ -253,6 +265,7 @@ function rollDice(diceType, value) {
     }, 1000);
 }
 
+// Connects to a Pixel via the Pixels Web Connect library
 async function requestMyPixel() {
     const pixel = await requestPixel();
 
