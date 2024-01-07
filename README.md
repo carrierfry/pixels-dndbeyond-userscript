@@ -22,7 +22,7 @@ You can run it with [Tampermonkey](https://www.tampermonkey.net/).
 1. Install [Tampermonkey](https://www.tampermonkey.net/) into your browser (chromium based browsers like Chrome or Edge should work)
 2. Install the script by clicking [here](https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js) and clicking on `Install script`
 3. Open a character sheet in DnD Beyond (make sure to reload the page once it's open if you opened it by clicking on `view` in your campaign or character overview)
-4. Click on the `Connect to Pixels` button at the top and connect to your Pixel dice
+4. Click on the `Connect to Pixels` text at the top right (to the right of the `Subscribe` text) and connect to your Pixel dice
 5. Roll a pixel die
 6. (Optional) If you want to see the roll, refresh the page and open the game log again. Your roll should be visible there.
 
