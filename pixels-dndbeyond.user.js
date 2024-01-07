@@ -263,6 +263,8 @@ function rollDice(diceType, value) {
         console.log("sending value: " + dieValue);
         socket.send(JSON.stringify(buildRolledJson(initJson.data.rollId, dieValue)));
     }, 1000);
+
+    createToast(diceType, value);
 }
 
 // Connects to a Pixel via the Pixels Web Connect library
@@ -278,4 +280,23 @@ async function requestMyPixel() {
         // For now only D20, other dice in the future when I have my own dice and can explore the data structures :(
         rollDice("d20", face);
     });
+
+    window.pixel = pixel;
+}
+
+window.createToast = function (dieType, value) {
+    let div = document.createElement("div");
+    div.id = generateDnDBeyondId();
+
+    let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"> <div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"> <div class="noty_body"> <div class="dice_result "> <div class="dice_result__info"> <div class="dice_result__info__title"><span class="dice_result__info__rolldetail"> </span><span class="dice_result__rolltype rolltype_roll" style="animation: linear party-time-text 1s infinite;">pixel roll</span></div> <div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span></div><span class="dice_result__info__dicenotation" title="1DIETYPE">1DIETYPE</span> </div> <div class="dice_result__total-container"><span class="dice_result__total-result dice_result__total-result-">VALUE</span></div> </span> </div> </div> <div class="noty_progressbar"></div> </div> </div>'
+    innerDiv = innerDiv.replace("UUID", generateDnDBeyondId());
+    innerDiv = innerDiv.replaceAll("DIETYPE", dieType);
+    innerDiv = innerDiv.replaceAll("VALUE", value);
+
+    div.innerHTML = innerDiv;
+    document.querySelector("body").appendChild(div);
+
+    setTimeout(() => {
+        div.remove();
+    }, 5000);
 }
