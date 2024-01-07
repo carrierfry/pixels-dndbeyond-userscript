@@ -6,7 +6,7 @@ You can run it with [Tampermonkey](https://www.tampermonkey.net/).
 
 ## Features
 - Can connect to Pixel dice
-- Can identify a roll with a Pixel die and submit it to DnD Beyond as a custom roll (Currently only D20s work)
+- Can identify a roll with a Pixel die and submit it to DnD Beyond as a custom roll
 - Die rolls appear in the game log for other players that are in the session
 
 ## How to use
