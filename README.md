@@ -6,17 +6,8 @@ You can run it with [Tampermonkey](https://www.tampermonkey.net/).
 
 ## Features
 - Can connect to Pixel dice
-- Can identify a roll with a Pixel die and submit it to DnD Beyond (Currently only 1 D20)
-
-## Todos / Things that need to be implemented
-- [ ] Support other dice than D20s
-- [ ] Test if it works with pixel dice actually, since I don't have any right now
-- [ ] Make it possible to automatically add the modifiers to the roll (e.g. +5 for a strength check)
-- [ ] Show the roll to the user (currently only the other players who are in the session can see it live)
-
-## Known bugs
-- Currently, the script only works if you open the character sheet in DnD Beyond directly (for example by reloading the page). If you open the character sheet by clicking on `view` in your campaign or character overwie, it won't work. (This is because DnD Beyond is a single site application and the script only runs once when the page is loaded.)
-- Since this userscript only interacts with the websocket of DnD Beyond, you currently can't see the roll in the game log until you reload the page. Other players that are in the session will see the roll live though.
+- Can identify a roll with a Pixel die and submit it to DnD Beyond as a custom roll (Currently only D20s work)
+- Die rolls appear in the game log for other players that are in the session
 
 ## How to use
 1. Install [Tampermonkey](https://www.tampermonkey.net/) into your browser (chromium based browsers like Chrome or Edge should work)
@@ -25,6 +16,19 @@ You can run it with [Tampermonkey](https://www.tampermonkey.net/).
 4. Click on the `Connect to Pixels` text at the top right (to the right of the `Subscribe` text) and connect to your Pixel dice
 5. Roll a pixel die
 6. (Optional) If you want to see the roll, refresh the page and open the game log again. Your roll should be visible there.
+
+## Todos / Things that need to be implemented
+- [x] Support other dice than D20s
+- [ ] Test if it works with pixel dice actually, since I don't have any right now
+- [ ] Make it possible to automatically add the modifiers to the roll (e.g. +5 for a strength check)
+- [x] Show the roll to the user as a toast/popup
+- [ ] Show the roll in the game log to the user itself (currently only the other players who are in the session can see it live)
+
+## Known bugs
+- Currently, the script only works if you open the character sheet in DnD Beyond directly (for example by reloading the page). If you open the character sheet by clicking on `view` in your campaign or character overwie, it won't work. (This is because DnD Beyond is a single site application and the script only runs once when the page is loaded.)
+- If you are connected to your pixel dice and reload the page, you have to reconnect to your pixel dice again. (It shows that the dice is already connected, but it doesn't work until you reconnect.)
+- Since this userscript only interacts with the websocket of DnD Beyond, you currently can't see the roll in the game log until you reload the page. Other players that are in the session will see the roll live though.
+- d100 rolls are not supported currently (as you need to roll 2 d10s for that). Instead you have to roll 2 d10s separately and add them together in your head.
 
 ## Software used
 [Pixels Web Connect](https://github.com/GameWithPixels/pixels-js/tree/main/packages/pixels-web-connect) (via [unpkg](https://unpkg.com/))

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.3.1
+// @version      0.3.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -16,13 +16,144 @@
 const { repeatConnect, requestPixel } = pixelsWebConnect;
 
 const diceTypes = {
-    "d4": 4,
-    "d6": 6,
-    "d8": 8,
-    "d10": 10,
-    "d12": 12,
-    "d20": 20,
-    "d100": 100
+    "d4": {
+        "diceNotation": {
+            "set": [{
+                "count": 1,
+                "dieType": "d4",
+                "dice": [{
+                    "dieType": "d4",
+                    "dieValue": 0
+                }],
+                "operation": 0
+            }],
+            "constant": 0
+        },
+        "diceNotationStr": "1d4",
+        "rollType": "roll",
+        "rollKind": "",
+        "result": {
+            "constant": 0,
+            "values": [4],
+            "total": 4,
+            "text": "4"
+        }
+    },
+    "d6": {
+        "diceNotation": {
+            "set": [{
+                "count": 1,
+                "dieType": "d6",
+                "dice": [{
+                    "dieType": "d6",
+                    "dieValue": 0
+                }],
+                "operation": 0
+            }],
+            "constant": 0
+        },
+        "diceNotationStr": "1d6",
+        "rollType": "roll",
+        "rollKind": "",
+        "result": {
+            "constant": 0,
+            "values": [6],
+            "total": 6,
+            "text": "6"
+        }
+    },
+    "d8": {
+        "diceNotation": {
+            "set": [{
+                "count": 1,
+                "dieType": "d8",
+                "dice": [{
+                    "dieType": "d8",
+                    "dieValue": 0
+                }],
+                "operation": 0
+            }],
+            "constant": 0
+        },
+        "diceNotationStr": "1d8",
+        "rollType": "roll",
+        "rollKind": "",
+        "result": {
+            "constant": 0,
+            "values": [8],
+            "total": 8,
+            "text": "8"
+        }
+    },
+    "d10": {
+        "diceNotation": {
+            "set": [{
+                "count": 1,
+                "dieType": "d10",
+                "dice": [{
+                    "dieType": "d10",
+                    "dieValue": 0
+                }],
+                "operation": 0
+            }],
+            "constant": 0
+        },
+        "diceNotationStr": "1d10",
+        "rollType": "roll",
+        "rollKind": "",
+        "result": {
+            "constant": 0,
+            "values": [10],
+            "total": 10,
+            "text": "10"
+        }
+    },
+    "d12": {
+        "diceNotation": {
+            "set": [{
+                "count": 1,
+                "dieType": "d12",
+                "dice": [{
+                    "dieType": "d12",
+                    "dieValue": 0
+                }],
+                "operation": 0
+            }],
+            "constant": 0
+        },
+        "diceNotationStr": "1d12",
+        "rollType": "roll",
+        "rollKind": "",
+        "result": {
+            "constant": 0,
+            "values": [12],
+            "total": 12,
+            "text": "12"
+        }
+    },
+    "d20": {
+        "diceNotation": {
+            "set": [{
+                "count": 1,
+                "dieType": "d20",
+                "dice": [{
+                    "dieType": "d20",
+                    "dieValue": 0
+                }],
+                "operation": 0
+            }],
+            "constant": 0
+        },
+        "diceNotationStr": "1d20",
+        "rollType": "roll",
+        "rollKind": "",
+        "result": {
+            "constant": 0,
+            "values": [20],
+            "total": 20,
+            "text": "20"
+        }
+    }
 };
 const diceMessageInitial = {
     "id": "12345678-1234-1234-1234-1234567890ab",
@@ -130,13 +261,13 @@ window.WebSocket = function (...args) {
 };
 
 
-setTimeout(main, 1000);
+setTimeout(main, 500);
 
 // Main function
 function main() {
     if (!socket || socket.readyState !== 1) {
         console.log("socket not ready");
-        setTimeout(main, 1000);
+        setTimeout(main, 500);
         return;
     }
 
@@ -161,7 +292,7 @@ function generateDnDBeyondId() {
 // There are two messages that need to be sent to the server to roll a die. The first is the initial message, the second is the rolled message.
 // The initial message is sent with a random rollId, the rolled message is sent with the same rollId as the initial message.
 // These 2 functions build the JSON for those messages.
-function buildInitialJson() {
+function buildInitialJson(dieType) {
     let json = JSON.parse(JSON.stringify(diceMessageInitial));
     json.id = generateDnDBeyondId();
     json.dateTime = Date.now();
@@ -174,10 +305,13 @@ function buildInitialJson() {
     json.messageTarget = getGameId();
     json.gameId = getGameId();
     json.entityId = getCharacterId();
+    json.data.rolls[0].diceNotation.set[0].dieType = dieType;
+    json.data.rolls[0].diceNotation.set[0].dice[0].dieType = dieType;
+    json.data.rolls[0].diceNotationStr = "1" + dieType;
     return json;
 }
 
-function buildRolledJson(rollId, dieValue) {
+function buildRolledJson(dieType, rollId, dieValue) {
     let json = JSON.parse(JSON.stringify(diceMessageRolled));
     json.id = generateDnDBeyondId();
     json.dateTime = Date.now();
@@ -190,8 +324,9 @@ function buildRolledJson(rollId, dieValue) {
     json.messageTarget = getGameId();
     json.gameId = getGameId();
     json.entityId = getCharacterId();
+    json.data.rolls[0] = JSON.parse(JSON.stringify(diceTypes[dieType]));
     json.data.rolls[0].diceNotation.set[0].dice[0].dieValue = dieValue;
-    json.data.rolls[0].result.values[0] = [dieValue];
+    json.data.rolls[0].result.values[0] = dieValue;
     json.data.rolls[0].result.total = dieValue;
     json.data.rolls[0].result.text = dieValue.toString();
     return json;
@@ -219,7 +354,6 @@ function addPixelsLogoButton() {
     // find the last mm-nav-item and insert after it
     let lastNavItem = document.querySelectorAll(".mm-nav-item");
     lastNavItem = lastNavItem[lastNavItem.length - 1];
-    console.log(lastNavItem);
     lastNavItem.parentNode.insertBefore(button, lastNavItem.nextSibling);
 }
 
@@ -252,23 +386,27 @@ function getAvatarUrl() {
 }
 
 // "Rolls" a die. You can specify the dice type and value and it will send the appropriate messages to the server.
-function rollDice(diceType, value) {
+function rollDice(dieType, value) {
     // Also here needs to be more work done to support other dice types
 
-    let initJson = buildInitialJson();
+    let initJson = buildInitialJson(dieType);
     socket.send(JSON.stringify(initJson));
 
     setTimeout(() => {
-        let dieValue = value || Math.floor(Math.random() * diceTypes[diceType]) + 1;
+        let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
         console.log("sending value: " + dieValue);
-        socket.send(JSON.stringify(buildRolledJson(initJson.data.rollId, dieValue)));
+        socket.send(JSON.stringify(buildRolledJson(dieType, initJson.data.rollId, dieValue)));
     }, 1000);
 
-    createToast(diceType, value);
+    createToast(dieType, value);
 }
 
 // Connects to a Pixel via the Pixels Web Connect library
 async function requestMyPixel() {
+    if (!window.pixels) {
+        window.pixels = [];
+    }
+
     const pixel = await requestPixel();
 
     console.log("Connecting...");
@@ -281,7 +419,7 @@ async function requestMyPixel() {
         rollDice("d20", face);
     });
 
-    window.pixel = pixel;
+    window.pixels.push(pixel);
 }
 
 window.createToast = function (dieType, value) {
@@ -298,5 +436,5 @@ window.createToast = function (dieType, value) {
 
     setTimeout(() => {
         div.remove();
-    }, 5000);
+    }, 8000);
 }
