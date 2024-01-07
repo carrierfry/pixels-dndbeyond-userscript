@@ -18,10 +18,10 @@ You can run it with [Tampermonkey](https://www.tampermonkey.net/).
 6. (Optional) If you want to see the roll, refresh the page and open the game log again. Your roll should be visible there.
 
 ## Todos / Things that need to be implemented
-- [x] Support other dice than D20s
-- [ ] Test if it works with pixel dice actually, since I don't have any right now
+- ~~[x] Support other dice than D20s~~
+- ~~[x] Test if it works with pixel dice actually, since I don't have any right now~~
 - [ ] Make it possible to automatically add the modifiers to the roll (e.g. +5 for a strength check)
-- [x] Show the roll to the user as a toast/popup
+- ~~[x] Show the roll to the user as a toast/popup~~
 - [ ] Show the roll in the game log to the user itself (currently only the other players who are in the session can see it live)
 
 ## Known bugs
