@@ -8,6 +8,7 @@ This is currently the only way to use Pixels with DnD Beyond, as DnD Beyond didn
 - Can connect to Pixel dice
 - Can identify a roll with a Pixel die and submit it to DnD Beyond as a custom roll
 - Die rolls appear in the game log for other players that are in the session
+- "Pixel Mode" button. Let's you choose a check/save/damage and waits for you to roll your Pixel die. After you rolled the die, it automatically submits the roll to DnD Beyond
 
 ## How to use
 1. Install [Tampermonkey](https://www.tampermonkey.net/) into your browser (chromium based browsers like Chrome or Edge should work)
@@ -20,7 +21,7 @@ This is currently the only way to use Pixels with DnD Beyond, as DnD Beyond didn
 ## Todos / Things that need to be implemented
 - [x] ~~Support other dice than D20s~~
 - [x] ~~Test if it works with pixel dice actually, since I don't have any right now~~
-- [ ] Make it possible to automatically add the modifiers to the roll (e.g. +5 for a strength check)
+- [x] ~~Make it possible to automatically add the modifiers to the roll (e.g. +5 for a strength check)~~
 - [ ] Make it possible to throw multiple dice at once (e.g. `2d6+1d4`)
 - [x] ~~Show the roll to the user as a toast/popup~~
 - [ ] Show the roll in the game log to the user itself (currently only the other players who are in the session can see it live)
