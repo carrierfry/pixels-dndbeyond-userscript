@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.3.3
+// @version      0.3.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -251,6 +251,10 @@ const diceMessageRolled = {
 let pixelMode = false;
 let originalDiceClick = [];
 let currentlyExpectedRoll = {};
+let gameLogOpen = false;
+let rolledJsonArray = [];
+let rolledJsonArrayIndex = 0;
+let currentlyUpdatingGameLog = false;
 
 // Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
@@ -278,6 +282,7 @@ function main() {
     GM_addStyle(".ct-character-header-desktop__group--pixels-active{ background-color: #C53131; }");
     addPixelsLogoButton();
     addPixelModeButton();
+    setInterval(checkForOpenGameLog, 500);
 }
 
 // generates a random hex string of the given length
@@ -429,13 +434,17 @@ function rollDice(dieType, value) {
     let initJson = buildInitialJson(dieType);
     socket.send(JSON.stringify(initJson));
 
+    let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
+    let rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier);
+
     setTimeout(() => {
-        let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
         console.log("sending value: " + dieValue);
-        socket.send(JSON.stringify(buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier)));
+        socket.send(JSON.stringify(rolledJson));
     }, 1000);
 
     createToast(dieType, value, modifier);
+    // appendElementToGameLog(rolledJson);
+    rolledJsonArray.push(rolledJson);
     currentlyExpectedRoll = {};
 }
 
@@ -454,7 +463,7 @@ async function requestMyPixel() {
         console.log(`=> rolled face: ${face}`);
 
         // For now only D20, other dice in the future when I have my own dice and can explore the data structures :(
-        rollDice("d20", face);
+        rollDice(pixel.dieType, face);
     });
 
     window.pixels.push(pixel);
@@ -593,6 +602,38 @@ function getAmountFromButton(button) {
     return amount;
 }
 
+function checkForOpenGameLog() {
+    let gameLog = document.querySelector("[class*='GameLogEntries']");
+
+    if (gameLog !== null) {
+        if (!currentlyUpdatingGameLog) {
+            currentlyUpdatingGameLog = true;
+            if (gameLogOpen) {
+                if (rolledJsonArrayIndex < rolledJsonArray.length - 1) {
+                    rolledJsonArrayIndex++;
+                    appendElementToGameLog(rolledJsonArray[rolledJsonArrayIndex]);
+                }
+            } else {
+                rolledJsonArrayIndex = 0;
+                document.querySelectorAll(".pixels-added-entry").forEach((element) => {
+                    element.remove();
+                });
+
+                for (let i = 0; i < rolledJsonArray.length; i++) {
+                    appendElementToGameLog(rolledJsonArray[i]);
+                    rolledJsonArrayIndex = i;
+                }
+
+                gameLogOpen = true;
+            }
+            currentlyUpdatingGameLog = false;
+        }
+    } else {
+        gameLogOpen = false;
+        rolledJsonArrayIndex = 0;
+    }
+}
+
 
 window.createToast = function (dieType, value, modifier = 0) {
     let div = document.createElement("div");
@@ -612,6 +653,31 @@ window.createToast = function (dieType, value, modifier = 0) {
     setTimeout(() => {
         div.remove();
     }, 8000);
+}
+
+window.appendElementToGameLog = function (json) {
+    let gameLog = document.querySelector("[class*='GameLogEntries']");
+
+    let element = document.createElement("li");
+    element.className = "tss-8-Self-ref tss-1kuahcg-GameLogEntry-Self-Flex pixels-added-entry";
+    let innerDiv = '<div class="tss-1e6zv06-MessageContainer-Flex"> <div class="tss-dr2its-Line-Flex"><span class="tss-1tj70tb-Sender">CHARACTER_NAME</span></div> <div class="tss-8-Self-ref tss-cmvb5s-Message-Self-Flex"> <div class="tss-iqf1z5-Container-Flex"> <div class="tss-24rg5g-DiceResultContainer-Flex"> <div class="tss-kucurx-Result"> <div class="tss-3-Self-ref tss-1rj7iab-Line-Title-Self"><span class="tss-cx78hg-Action">WHAT</span>: <span class="tss-1xoxte4-RollType">TYPE</span> </div> <div class="tss-16k6xf2-Line-Breakdown"><svg width="32" height="32" fill="currentColor" title="D20" class="tss-1qy7qai-DieIcon"> <path d="M16 1l14 7.45v15l-1 .596L16 31 2 23.55V8.45L16 1zm5 19.868H10l6 7.45 5-7.45zm-13.3.496L5 22.954l7.1 3.874-4.4-5.464zm16.6-.1l-4.4 5.464 7.1-3.874-2.7-1.59zM4 13.716v7.55l2.7-1.59-2.7-5.96zm24 0l-2.7 5.96.2.1 2.5 1.49v-7.55zM16 9.841l-6 9.04h12l-6-9.04zm-2-.596l-9.6.795 3.7 7.947L14 9.245zm4 0l5.8 8.742 3.7-8.047-9.5-.695zm-1-5.464V7.16l7.4.596L17 3.781zm-2 0L7.6 7.755l7.4-.596V3.78z"> </path> </svg><span class="tss-3-Self-ref tss-1nuv2ow-Line-Number-Self" title="COMBINED">COMBINED</span> </div> <div class="tss-1wcf5kt-Line-Notation"><span>DICE_NOTATION</span></div> </div><svg width="19" height="70" viewBox="0 0 19 100" class="tss-1ddr9a0-DividerResult"> <path fill="currentColor" d="M10 0v30H9V0zm0 70v30H9V70zm9-13H0v-3h19zm0-10H0v-3h19z"></path> </svg> <div class="tss-1jo3bnd-TotalContainer-Flex"> <div class="tss-3-Self-ref tss-183k5bv-Total-Self-Flex"><span>VALUE</span></div> </div> </div> <div class="tss-1tqix15-DicePreviewContainer-Flex"> <div class="tss-yuoem4-SetPreviewContainer-Flex"><span class="tss-2auhl5-PreviewThumbnail-DieThumbnailContainer"><span title="2" class="tss-171s1s1-DieThumbnailWrapper"><img class="tss-s4qeha-DieThumbnailImage" src="https://www.dndbeyond.com/dice/images/thumbnails/00101-d20-2.png" alt="d20 roll of 2"></span></span> <div class="tss-xdfhrf-SetPreviewDescriptionContainer"> <div class="tss-1dhkeq7-Divider"></div> <div class="tss-1x8v1yt-SetPreviewActionsContainer-Flex"><span class="tss-15yp4kz-SetPreviewDescription">Rolled with Basic Black: Black</span> </div> </div> </div> <div class="tss-eaaqq4-DieThumbnailsList"></div> </div> </div> </div><time datetime="DATETIME" title="DATETIME_HUMAN" class="tss-1yxh2yy-TimeAgo-TimeAgo">TIME_HUMAN</time> </div>';
+
+    innerDiv = innerDiv.replaceAll("CHARACTER_NAME", getCharacterName());
+    innerDiv = innerDiv.replaceAll("WHAT", "custom");
+    innerDiv = innerDiv.replaceAll("TYPE", "roll");
+    innerDiv = innerDiv.replaceAll("COMBINED", json.data.rolls[0].result.text);
+    innerDiv = innerDiv.replaceAll("DICE_NOTATION", json.data.rolls[0].diceNotationStr);
+    innerDiv = innerDiv.replaceAll("VALUE", json.data.rolls[0].result.total);
+    // date time in this format: 2024-01-08T20:01:30+01:00
+    innerDiv = innerDiv.replaceAll("DATETIME", new Date(json.dateTime).toISOString());
+    // date time in this format: 1/8/2024 8:01 PM (force AM/PM)
+    innerDiv = innerDiv.replaceAll("DATETIME_HUMAN", new Date(json.dateTime).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }));
+    // time in this format: 8:01 PM (force AM/PM)
+    innerDiv = innerDiv.replaceAll("TIME_HUMAN", new Date(json.dateTime).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }).split(",")[0]);
+
+    element.innerHTML = innerDiv;
+
+    gameLog.prepend(element);
 }
 
 window.rollDice = rollDice;

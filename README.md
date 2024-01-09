@@ -24,12 +24,11 @@ This is currently the only way to use Pixels with DnD Beyond, as DnD Beyond didn
 - [x] ~~Make it possible to automatically add the modifiers to the roll (e.g. +5 for a strength check)~~
 - [ ] Make it possible to throw multiple dice at once (e.g. `2d6+1d4`)
 - [x] ~~Show the roll to the user as a toast/popup~~
-- [ ] Show the roll in the game log to the user itself (currently only the other players who are in the session can see it live)
+- [x] ~~Show the roll in the game log to the user itself (currently only the other players who are in the session can see it live)~~
 
 ## Known bugs
 - Currently, the script only works if you open the character sheet in DnD Beyond directly (for example by reloading the page). If you open the character sheet by clicking on `view` in your campaign or character overwie, it won't work. (This is because DnD Beyond is a single site application and the script only runs once when the page is loaded.)
 - If you are connected to your pixel dice and reload the page, you have to reconnect to your pixel dice again. (It shows that the dice is already connected, but it doesn't work until you reconnect.)
-- Since this userscript only interacts with the websocket of DnD Beyond, you currently can't see the roll in the game log until you reload the page. Other players that are in the session will see the roll live though.
 - d100 rolls are not supported currently (as you need to roll 2 d10s for that). Instead you have to roll 2 d10s separately and add them together in your head.
 
 ## Software used
