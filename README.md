@@ -16,7 +16,12 @@ This is currently the only way to use Pixels with DnD Beyond, as DnD Beyond didn
 3. Open a character sheet in DnD Beyond (make sure to reload the page once it's open if you opened it by clicking on `view` in your campaign or character overview)
 4. Click on the `Connect to Pixels` text at the top right (to the right of the `Subscribe` text) and connect to your Pixel dice
 5. Roll a pixel die
-6. (Optional) If you want to see the roll, refresh the page and open the game log again. Your roll should be visible there.
+
+## What is "Pixel Mode"?
+Pixel Mode allows you to choose a check/save/damage and then roll your Pixel die. Instead of rolling a virtual die, the site waits for you to roll your Pixel die and then automatically submits the roll to DnD Beyond.
+You can enable it by clicking on the `Pixel Mode` button at the top beside the `Short Rest` button.
+
+Currently, Pixel Mode still has a few bugs when switching to a different tab on the character sheet (e.g. from `ACTIONS` to `SPELLS`), so it's recommended to disable Pixel Mode before switching tabs!
 
 ## Todos / Things that need to be implemented
 - [x] ~~Support other dice than D20s~~
