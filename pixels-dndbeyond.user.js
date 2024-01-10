@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.3.6
+// @version      0.3.7
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -314,6 +314,9 @@ function buildInitialJson(dieType, modifier = 0) {
     json.data.context.entityId = getCharacterId();
     json.data.context.name = getCharacterName();
     json.data.context.avatarUrl = getAvatarUrl();
+    if (json.data.context.avatarUrl === null) {
+        delete json.data.context.avatarUrl;
+    }
     json.data.context.messageTarget = getGameId();
     json.userId = getUserId();
     json.messageTarget = getGameId();
@@ -341,6 +344,9 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0) {
     json.data.context.entityId = getCharacterId();
     json.data.context.name = getCharacterName();
     json.data.context.avatarUrl = getAvatarUrl();
+    if (json.data.context.avatarUrl === null) {
+        delete json.data.context.avatarUrl;
+    }
     json.data.context.messageTarget = getGameId();
     json.userId = getUserId();
     json.messageTarget = getGameId();
@@ -415,7 +421,11 @@ function getUserId() {
 }
 
 function getAvatarUrl() {
-    let avatar = document.querySelector(".ddbc-character-avatar__portrait").getAttribute("style").split("url(\"")[1].split("\")")[0];
+    let avatar = document.querySelector(".ddbc-character-avatar__portrait").getAttribute("style");
+    if (avatar === null) {
+        return null;
+    }
+    avatar = avatar.split("url(\"")[1].split("\")")[0];
     return avatar;
 }
 
