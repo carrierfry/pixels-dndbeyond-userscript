@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.3.4
+// @version      0.3.5
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -474,7 +474,7 @@ function addPixelModeButton() {
     div.className = "ct-character-header-desktop__group ct-character-header-desktop__group--pixels";
 
     div.innerHTML = '<div class="ct-character-header-desktop__button" role="button" tabindex="0"> <div class="ct-character-header-desktop__button-icon"> <img src="https://www.google.com/s2/favicons?sz=16&domain=https://gamewithpixels.com/"> </div> <span class="ct-character-header-desktop__button-label">Pixel Mode</span> </div>'
-    document.querySelector(".ct-character-header-desktop__group--share").parentNode.insertBefore(div, document.querySelector(".ct-character-header-desktop__group--share").nextSibling);
+    document.querySelector(".ct-character-header-desktop__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-desktop__group--short-rest"));
 
     div.onclick = (e) => {
         e.preventDefault();
@@ -681,6 +681,7 @@ window.appendElementToGameLog = function (json) {
 }
 
 window.rollDice = rollDice;
+window.pwc = pixelsWebConnect;
 
 function GM_addStyle(css) {
     const style = document.getElementById("GM_addStyleBy8626") || (function () {
