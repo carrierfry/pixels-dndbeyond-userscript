@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.3.5
+// @version      0.3.6
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -255,6 +255,7 @@ let gameLogOpen = false;
 let rolledJsonArray = [];
 let rolledJsonArrayIndex = 0;
 let currentlyUpdatingGameLog = false;
+let firstEntryAddedToGameLog = false;
 
 // Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
@@ -279,7 +280,9 @@ function main() {
         return;
     }
 
-    GM_addStyle(".ct-character-header-desktop__group--pixels-active{ background-color: #C53131; }");
+    let color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
+
+    GM_addStyle(".ct-character-header-desktop__group--pixels-active{ background-color: " + color + " !important; }");
     addPixelsLogoButton();
     addPixelModeButton();
     setInterval(checkForOpenGameLog, 500);
@@ -321,7 +324,11 @@ function buildInitialJson(dieType, modifier = 0) {
     json.data.rolls[0].diceNotationStr = "1" + dieType;
     if (modifier !== 0) {
         json.data.rolls[0].diceNotation.constant = modifier;
-        json.data.rolls[0].diceNotationStr = "1" + dieType + "+" + modifier;
+        if (modifier > 0) {
+            json.data.rolls[0].diceNotationStr = "1" + dieType + "+" + modifier;
+        } else {
+            json.data.rolls[0].diceNotationStr = "1" + dieType + modifier;
+        }
     }
     return json;
 }
@@ -347,9 +354,14 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0) {
     if (modifier !== 0) {
         json.data.rolls[0].diceNotation.constant = modifier;
         json.data.rolls[0].result.constant = modifier;
-        json.data.rolls[0].diceNotationStr = "1" + dieType + "+" + modifier;
         json.data.rolls[0].result.total += modifier;
-        json.data.rolls[0].result.text += "+" + modifier;
+        if (modifier > 0) {
+            json.data.rolls[0].diceNotationStr = "1" + dieType + "+" + modifier;
+            json.data.rolls[0].result.text += " + " + modifier;
+        } else {
+            json.data.rolls[0].diceNotationStr = "1" + dieType + modifier;
+            json.data.rolls[0].result.text += appenSpacesToSignOfNegativeNumbers(modifier);
+        }
     }
     return json;
 }
@@ -431,7 +443,7 @@ function rollDice(dieType, value) {
         modifier = currentlyExpectedRoll.modifier;
     }
 
-    let initJson = buildInitialJson(dieType);
+    let initJson = buildInitialJson(dieType, modifier);
     socket.send(JSON.stringify(initJson));
 
     let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
@@ -613,6 +625,10 @@ function checkForOpenGameLog() {
                     rolledJsonArrayIndex++;
                     appendElementToGameLog(rolledJsonArray[rolledJsonArrayIndex]);
                 }
+                if (rolledJsonArray.length === 1 && rolledJsonArrayIndex === 0 && firstEntryAddedToGameLog === false) {
+                    appendElementToGameLog(rolledJsonArray[rolledJsonArrayIndex]);
+                    firstEntryAddedToGameLog = true;
+                }
             } else {
                 rolledJsonArrayIndex = 0;
                 document.querySelectorAll(".pixels-added-entry").forEach((element) => {
@@ -622,6 +638,7 @@ function checkForOpenGameLog() {
                 for (let i = 0; i < rolledJsonArray.length; i++) {
                     appendElementToGameLog(rolledJsonArray[i]);
                     rolledJsonArrayIndex = i;
+                    firstEntryAddedToGameLog = true;
                 }
 
                 gameLogOpen = true;
@@ -643,7 +660,11 @@ window.createToast = function (dieType, value, modifier = 0) {
     innerDiv = innerDiv.replace("UUID", generateDnDBeyondId());
     innerDiv = innerDiv.replaceAll("DIETYPE", dieType);
     if (modifier !== 0) {
-        innerDiv = innerDiv.replaceAll("VALUE", value + "+" + modifier + " = " + (value + modifier));
+        if (modifier > 0) {
+            innerDiv = innerDiv.replaceAll("VALUE", value + " + " + modifier + " = " + (value + modifier));
+        } else {
+            innerDiv = innerDiv.replaceAll("VALUE", value + appenSpacesToSignOfNegativeNumbers(modifier) + " = " + (value + modifier));
+        }
     }
     innerDiv = innerDiv.replaceAll("VALUE", value);
 
@@ -693,4 +714,12 @@ function GM_addStyle(css) {
     })();
     const sheet = style.sheet;
     sheet.insertRule(css, (sheet.rules || sheet.cssRules || []).length);
+}
+
+function appenSpacesToSignOfNegativeNumbers(number) {
+    if (number < 0) {
+        return " - " + number.toString().substring(1);
+    } else {
+        return number;
+    }
 }
