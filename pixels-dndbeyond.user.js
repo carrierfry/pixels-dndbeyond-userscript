@@ -286,6 +286,19 @@ function main() {
     addPixelsLogoButton();
     addPixelModeButton();
     setInterval(checkForOpenGameLog, 500);
+    setInterval(checkForMissingPixelButtons, 1000);
+}
+
+function checkForMissingPixelButtons() {
+    // When you for example resize the window, so that the mobile view is shown, the buttons are removed. After resizing back to desktop view, the buttons do not
+    // get added back. This function checks for that and adds them back if they are missing.
+
+    let forgeButton = document.querySelectorAll(".ct-character-header-desktop__group--builder");
+    let pixelModeButton = document.querySelectorAll(".ct-character-header-desktop__group--pixels");
+    if (forgeButton.length > 0 && pixelModeButton.length === 0) {
+        addPixelsLogoButton();
+        addPixelModeButton();
+    }
 }
 
 // generates a random hex string of the given length
