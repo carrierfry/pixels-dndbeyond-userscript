@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.3.8.1
+// @version      0.3.9
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -256,6 +256,8 @@ let rolledJsonArray = [];
 let rolledJsonArrayIndex = 0;
 let currentlyUpdatingGameLog = false;
 let firstEntryAddedToGameLog = false;
+let pixelModeOnlyOnce = false;
+let tootltipShown = false;
 
 // Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
@@ -481,6 +483,16 @@ function rollDice(dieType, value) {
     // appendElementToGameLog(rolledJson);
     rolledJsonArray.push(rolledJson);
     currentlyExpectedRoll = {};
+
+    if (pixelModeOnlyOnce && pixelMode) {
+        pixelMode = false;
+        document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+        document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
+            element.parentNode.replaceChild(originalDiceClick[index], element);
+        });
+        originalDiceClick = [];
+        pixelModeOnlyOnce = false;
+    }
 }
 
 // Connects to a Pixel via the Pixels Web Connect library
@@ -510,10 +522,19 @@ function addPixelModeButton() {
 
     div.innerHTML = '<div class="ct-character-header-desktop__button" role="button" tabindex="0"> <div class="ct-character-header-desktop__button-icon"> <img src="https://www.google.com/s2/favicons?sz=16&domain=https://gamewithpixels.com/"> </div> <span class="ct-character-header-desktop__button-label">Pixel Mode</span> </div>'
     document.querySelector(".ct-character-header-desktop__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-desktop__group--short-rest"));
+    div.oncontextmenu = function (e) {
+        e.preventDefault();
+    }
 
-    div.onclick = (e) => {
+    div.addEventListener('mouseup', function (e) {
         e.preventDefault();
         console.log("Pixels button clicked");
+
+        //e.button describes the mouse button that was clicked
+        // 0 is left, 1 is middle, 2 is right
+        if (e.button == 0) {
+            pixelModeOnlyOnce = true;
+        }
 
         pixelMode = !pixelMode;
         if (pixelMode) {
@@ -549,8 +570,33 @@ function addPixelModeButton() {
             });
 
             originalDiceClick = [];
+            pixelModeOnlyOnce = false;
         }
-    };
+    });
+
+    div.addEventListener('mouseover', function (e) {
+        e.preventDefault();
+        console.log("Pixels button hovered");
+
+        if (!tootltipShown) {
+
+            let topleft = getPageTopLeft(div);
+
+            displayTooltip("Left click to enable pixel mode for 1 roll.<br>Right click to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
+            //displayTooltip("Test", topleft.left, topleft.top);
+            tootltipShown = true;
+        }
+    });
+
+    div.addEventListener('mouseout', function (e) {
+        e.preventDefault();
+        console.log("Pixels button unhovered");
+
+        if (tootltipShown) {
+            document.querySelector(".tippy-popper--pixel-mode").remove();
+            tootltipShown = false;
+        }
+    });
 }
 
 function getDieTypeFromButton(button) {
@@ -745,4 +791,33 @@ function appenSpacesToSignOfNegativeNumbers(number) {
     } else {
         return number;
     }
+}
+
+function getPageTopLeft(el) {
+    var rect = el.getBoundingClientRect();
+    var docEl = document.documentElement;
+    return {
+        left: rect.left + (window.pageXOffset || docEl.scrollLeft || 0),
+        top: rect.top + (window.pageYOffset || docEl.scrollTop || 0)
+    };
+}
+
+function displayTooltip(tooltipText, x, y) {
+    let styleText = "z-index: 9999; transition-duration: 350ms; visibility: visible; position: absolute; top: 0px; left: 0px; will-change: transform; transform: translate3d(xpospx, ypospx, 0px);";
+    styleText = styleText.replace("xpos", x);
+    styleText = styleText.replace("ypos", y);
+
+    let innerHTML = '<div class="tippy-tooltip custom-dark-theme" data-size="regular" data-animation="scale" data-state="visible" style="transition-duration: 100ms; top: 0px;"><div class="tippy-arrow" style=""></div><div class="tippy-content">TEXT</div></div>';
+    innerHTML = innerHTML.replace("TEXT", tooltipText);
+
+    let tooltip = document.createElement("div");
+    tooltip.className = "tippy-popper tippy-popper--pixel-mode";
+    tooltip.id = "tippy-50";
+    tooltip.setAttribute("role", "tooltip");
+    tooltip.setAttribute("x-placement", "top");
+    tooltip.setAttribute("style", styleText);
+
+    tooltip.innerHTML = innerHTML;
+
+    document.querySelector("body").appendChild(tooltip);
 }

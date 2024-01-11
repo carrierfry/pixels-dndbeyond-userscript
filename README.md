@@ -31,6 +31,9 @@ These are the browsers we have tested and confirmed to work:
 Pixel Mode allows you to choose a check/save/damage and then roll your Pixel die. Instead of rolling a virtual die, the site waits for you to roll your Pixel die and then automatically submits the roll to DnD Beyond.
 You can enable it by clicking on the `Pixel Mode` button at the top beside the `Short Rest` button.
 
+If you left click on the `Pixel Mode` button, it will enable Pixel Mode for the next roll.<br>
+If you right click on the `Pixel Mode` button, it will enable Pixel Mode until you disable it again.
+
 Currently, Pixel Mode still has a few bugs when switching to a different tab on the character sheet (e.g. from `ACTIONS` to `SPELLS`), so it's recommended to disable Pixel Mode before switching tabs!
 
 ## Todos / Things that need to be implemented
