@@ -10,6 +10,15 @@ This is currently the only way to use Pixels with DnD Beyond, as DnD Beyond didn
 - Die rolls appear in the game log for other players that are in the session
 - "Pixel Mode" button. Let's you choose a check/save/damage and waits for you to roll your Pixel die. After you rolled the die, it automatically submits the roll to DnD Beyond
 
+## Which browsers are supported?
+These are the browsers we have tested and confirmed to work:
+- Google Chrome
+- Chromium
+- Microsoft Edge
+- Vivaldi
+
+⚠️⚠️⚠️ **Safari, Firefox, Brave and Opera are not supported** yet, as they either don't support the Bluetooth Web API yet or disabled it on purpose! ⚠️⚠️⚠️
+
 ## How to use
 1. Install [Tampermonkey](https://www.tampermonkey.net/) into your browser (chromium based browsers like Chrome or Edge should work)
 2. Install the script by clicking [here](https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js) and clicking on `Install script`
