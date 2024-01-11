@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.3.9
+// @version      0.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -258,6 +258,8 @@ let currentlyUpdatingGameLog = false;
 let firstEntryAddedToGameLog = false;
 let pixelModeOnlyOnce = false;
 let tootltipShown = false;
+let contextMenuShown = false;
+let lastRightClickedButton = null;
 
 // Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
@@ -289,6 +291,8 @@ function main() {
     addPixelModeButton();
     setInterval(checkForOpenGameLog, 500);
     setInterval(checkForMissingPixelButtons, 1000);
+    setInterval(checkForContextMenu, 300);
+    setInterval(listenForRightClicks, 300);
 }
 
 function checkForMissingPixelButtons() {
@@ -301,6 +305,64 @@ function checkForMissingPixelButtons() {
         addPixelsLogoButton();
         addPixelModeButton();
     }
+}
+
+function checkForContextMenu() {
+    let contextMenu = document.querySelector(".MuiPaper-root");
+
+    if (contextMenu !== null) {
+        addRollWithPixelButton(contextMenu);
+        contextMenuShown = true;
+    } else {
+        contextMenuShown = false;
+    }
+}
+
+function addRollWithPixelButton(contextMenu) {
+    if (!contextMenuShown) {
+        let button = document.createElement("button");
+        button.className = "MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-1kol59t";
+        button.setAttribute("tabindex", "0");
+        button.setAttribute("type", "button");
+        button.innerText = "Roll with Pixels";
+
+        button.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log("Roll with Pixels clicked");
+
+            contextMenu.remove();
+
+            let modifier = getModifierFromButton(lastRightClickedButton);
+            let dieType = getDieTypeFromButton(lastRightClickedButton);
+            let amount = getAmountFromButton(lastRightClickedButton);
+
+            currentlyExpectedRoll = {
+                "modifier": modifier,
+                "dieType": dieType,
+                "amount": amount
+            };
+
+        };
+
+        contextMenu.firstChild.appendChild(button);
+    }
+}
+
+function listenForRightClicks() {
+    document.querySelectorAll(".integrated-dice__container").forEach((element) => {
+        element.removeEventListener('mouseup', handleRightClick);
+
+        element.addEventListener('mouseup', handleRightClick);
+    });
+}
+
+function handleRightClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log("Dice right clicked");
+
+    lastRightClickedButton = e.currentTarget;
 }
 
 // generates a random hex string of the given length
@@ -381,7 +443,7 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0) {
             json.data.rolls[0].result.text += " + " + modifier;
         } else {
             json.data.rolls[0].diceNotationStr = "1" + dieType + modifier;
-            json.data.rolls[0].result.text += appenSpacesToSignOfNegativeNumbers(modifier);
+            json.data.rolls[0].result.text += appendSpacesToSignOfNegativeNumbers(modifier);
         }
     }
     return json;
@@ -457,6 +519,7 @@ function rollDice(dieType, value) {
 
         if (currentlyExpectedRoll.amount > 1) {
             console.log("multiple dice not supported yet");
+            currentlyExpectedRoll = {};
             return;
         }
 
@@ -732,7 +795,7 @@ window.createToast = function (dieType, value, modifier = 0) {
         if (modifier > 0) {
             innerDiv = innerDiv.replaceAll("VALUE", value + " + " + modifier + " = " + (value + modifier));
         } else {
-            innerDiv = innerDiv.replaceAll("VALUE", value + appenSpacesToSignOfNegativeNumbers(modifier) + " = " + (value + modifier));
+            innerDiv = innerDiv.replaceAll("VALUE", value + appendSpacesToSignOfNegativeNumbers(modifier) + " = " + (value + modifier));
         }
     }
     innerDiv = innerDiv.replaceAll("VALUE", value);
@@ -785,7 +848,7 @@ function GM_addStyle(css) {
     sheet.insertRule(css, (sheet.rules || sheet.cssRules || []).length);
 }
 
-function appenSpacesToSignOfNegativeNumbers(number) {
+function appendSpacesToSignOfNegativeNumbers(number) {
     if (number < 0) {
         return " - " + number.toString().substring(1);
     } else {
