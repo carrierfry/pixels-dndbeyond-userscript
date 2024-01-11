@@ -47,6 +47,7 @@ Currently, Pixel Mode still has a few bugs when switching to a different tab on 
 - d100 rolls are not supported currently (as you need to roll 2 d10s for that). Instead you have to roll 2 d10s separately and add them together in your head.
 - Pixel Mode has a few bugs when switching to a different tab on the character sheet (e.g. from `ACTIONS` to `SPELLS`), so it's recommended to disable Pixel Mode before switching tabs!
 - If your character is not in any campaign, the script won't work.
+- If you use [Beyond20](https://beyond20.here-for-more.info/), there are buttons that won't work in pixel mode and the rolls currently won't get sent to Roll20.
 
 ## Software used
 [Pixels Web Connect](https://github.com/GameWithPixels/pixels-js/tree/main/packages/pixels-web-connect) (via [unpkg](https://unpkg.com/))
