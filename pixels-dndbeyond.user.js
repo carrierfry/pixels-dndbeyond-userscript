@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.3.8
+// @version      0.3.8.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -463,7 +463,7 @@ function rollDice(dieType, value) {
         //     return;
         // }
 
-        modifier = currentlyExpectedRoll.modifier;
+        modifier = parseInt(currentlyExpectedRoll.modifier);
     }
 
     let initJson = buildInitialJson(dieType, modifier);
