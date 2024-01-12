@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.1
+// @version      0.4.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -229,7 +229,8 @@ const diceMessageRolled = {
                 "total": 1,
                 "text": "1"
             }
-        }], "context": {
+        }],
+        "context": {
             "entityId": "12345678",
             "entityType": "character",
             "name": "Character Name",
@@ -248,7 +249,7 @@ const diceMessageRolled = {
     "messageTarget": "1234567"
 }
 
-let toDoLookup = {
+const toDoLookup = {
     "d4": "You need to roll x d4!",
     "d6": "You need to roll x d6!",
     "d8": "You need to roll x d8!",
@@ -256,6 +257,8 @@ let toDoLookup = {
     "d12": "You need to roll x d12!",
     "d20": "You need to roll x d20!",
 }
+
+let multiRolls = [];
 
 let pixelMode = false;
 let originalDiceClick = [];
@@ -385,11 +388,15 @@ function listenForRightClicks() {
 }
 
 function handleRightClick(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    console.log("Dice right clicked");
+    //e.button describes the mouse button that was clicked
+    // 0 is left, 1 is middle, 2 is right
+    if (e.button == 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log("Dice right clicked");
 
-    lastRightClickedButton = e.currentTarget;
+        lastRightClickedButton = e.currentTarget;
+    }
 }
 
 // generates a random hex string of the given length
@@ -410,7 +417,7 @@ function generateDnDBeyondId() {
 // There are two messages that need to be sent to the server to roll a die. The first is the initial message, the second is the rolled message.
 // The initial message is sent with a random rollId, the rolled message is sent with the same rollId as the initial message.
 // These 2 functions build the JSON for those messages.
-function buildInitialJson(dieType, modifier = 0) {
+function buildInitialJson(dieType, modifier = 0, amount = 1) {
     let json = JSON.parse(JSON.stringify(diceMessageInitial));
     json.id = generateDnDBeyondId();
     json.dateTime = Date.now();
@@ -426,21 +433,29 @@ function buildInitialJson(dieType, modifier = 0) {
     json.messageTarget = getGameId();
     json.gameId = getGameId();
     json.entityId = getCharacterId();
+    json.data.rolls[0].diceNotation.set[0].count = amount;
     json.data.rolls[0].diceNotation.set[0].dieType = dieType;
     json.data.rolls[0].diceNotation.set[0].dice[0].dieType = dieType;
-    json.data.rolls[0].diceNotationStr = "1" + dieType;
+    if (amount > 1) {
+        let clone = JSON.parse(JSON.stringify(json.data.rolls[0].diceNotation.set[0].dice[0]));
+        json.data.rolls[0].diceNotation.set[0].dice = [];
+        for (let i = 0; i < amount; i++) {
+            json.data.rolls[0].diceNotation.set[0].dice.push(clone);
+        }
+    }
+    json.data.rolls[0].diceNotationStr = amount + dieType;
     if (modifier !== 0) {
         json.data.rolls[0].diceNotation.constant = modifier;
         if (modifier > 0) {
-            json.data.rolls[0].diceNotationStr = "1" + dieType + "+" + modifier;
+            json.data.rolls[0].diceNotationStr = amount + dieType + "+" + modifier;
         } else {
-            json.data.rolls[0].diceNotationStr = "1" + dieType + modifier;
+            json.data.rolls[0].diceNotationStr = amount + dieType + modifier;
         }
     }
     return json;
 }
 
-function buildRolledJson(dieType, rollId, dieValue, modifier = 0) {
+function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1) {
     let json = JSON.parse(JSON.stringify(diceMessageRolled));
     json.id = generateDnDBeyondId();
     json.dateTime = Date.now();
@@ -457,21 +472,69 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0) {
     json.gameId = getGameId();
     json.entityId = getCharacterId();
     json.data.rolls[0] = JSON.parse(JSON.stringify(diceTypes[dieType]));
+    json.data.rolls[0].diceNotation.set[0].count = amount;
     json.data.rolls[0].diceNotation.set[0].dice[0].dieValue = dieValue;
     json.data.rolls[0].result.values[0] = dieValue;
     json.data.rolls[0].result.total = dieValue;
     json.data.rolls[0].result.text = dieValue.toString();
+    json.data.rolls[0].diceNotationStr = amount + dieType;
     if (modifier !== 0) {
         json.data.rolls[0].diceNotation.constant = modifier;
         json.data.rolls[0].result.constant = modifier;
         json.data.rolls[0].result.total += modifier;
         if (modifier > 0) {
-            json.data.rolls[0].diceNotationStr = "1" + dieType + "+" + modifier;
-            json.data.rolls[0].result.text += " + " + modifier;
+            json.data.rolls[0].diceNotationStr = amount + dieType + "+" + modifier;
+            if (amount > 1) {
+                let clone = JSON.parse(JSON.stringify(json.data.rolls[0].diceNotation.set[0].dice[0]));
+                json.data.rolls[0].diceNotation.set[0].dice = [];
+                json.data.rolls[0].result.values = [];
+                json.data.rolls[0].result.text = "";
+                json.data.rolls[0].result.total = 0;
+                for (let i = 0; i < amount; i++) {
+                    clone.dieValue = multiRolls[i];
+                    json.data.rolls[0].diceNotation.set[0].dice.push(clone);
+                    json.data.rolls[0].result.values.push(multiRolls[i]);
+                    json.data.rolls[0].result.text += multiRolls[i] + "+";
+                    json.data.rolls[0].result.total += multiRolls[i];
+                }
+                json.data.rolls[0].result.text = json.data.rolls[0].result.text.slice(0, -1);
+                json.data.rolls[0].result.total += modifier;
+            }
+            json.data.rolls[0].result.text += "+" + modifier;
         } else {
-            json.data.rolls[0].diceNotationStr = "1" + dieType + modifier;
-            json.data.rolls[0].result.text += appendSpacesToSignOfNegativeNumbers(modifier);
+            json.data.rolls[0].diceNotationStr = "" + amount + dieType + modifier;
+            if (amount > 1) {
+                let clone = JSON.parse(JSON.stringify(json.data.rolls[0].diceNotation.set[0].dice[0]));
+                json.data.rolls[0].diceNotation.set[0].dice = [];
+                json.data.rolls[0].result.values = [];
+                json.data.rolls[0].result.text = "";
+                json.data.rolls[0].result.total = 0;
+                for (let i = 0; i < amount; i++) {
+                    clone.dieValue = multiRolls[i];
+                    json.data.rolls[0].diceNotation.set[0].dice.push(clone);
+                    json.data.rolls[0].result.values.push(multiRolls[i]);
+                    json.data.rolls[0].result.text += multiRolls[i] + "+";
+                    json.data.rolls[0].result.total += multiRolls[i];
+                }
+                json.data.rolls[0].result.text = json.data.rolls[0].result.text.slice(0, -1);
+                json.data.rolls[0].result.total += modifier;
+            }
+            json.data.rolls[0].result.text += "" + modifier;
         }
+    } else if (amount > 1) {
+        let clone = JSON.parse(JSON.stringify(json.data.rolls[0].diceNotation.set[0].dice[0]));
+        json.data.rolls[0].diceNotation.set[0].dice = [];
+        json.data.rolls[0].result.values = [];
+        json.data.rolls[0].result.text = "";
+        json.data.rolls[0].result.total = 0;
+        for (let i = 0; i < amount; i++) {
+            clone.dieValue = multiRolls[i];
+            json.data.rolls[0].diceNotation.set[0].dice.push(clone);
+            json.data.rolls[0].result.values.push(multiRolls[i]);
+            json.data.rolls[0].result.text += multiRolls[i] + "+";
+            json.data.rolls[0].result.total += multiRolls[i];
+        }
+        json.data.rolls[0].result.text = json.data.rolls[0].result.text.slice(0, -1);
     }
     return json;
 }
@@ -536,7 +599,8 @@ function getAvatarUrl() {
 // "Rolls" a die. You can specify the dice type and value and it will send the appropriate messages to the server.
 function rollDice(dieType, value) {
     let modifier = 0;
-    // Also here needs to be more work done to support other dice types
+    let multiRollComplete = false;
+    let amount = 1;
 
     if (Object.keys(currentlyExpectedRoll).length !== 0) {
         if (currentlyExpectedRoll.dieType !== dieType) {
@@ -545,44 +609,53 @@ function rollDice(dieType, value) {
         }
 
         if (currentlyExpectedRoll.amount > 1) {
-            console.log("multiple dice not supported yet");
-            currentlyExpectedRoll = {};
-            return;
-        }
+            // console.log("multiple dice not supported yet");
+            // currentlyExpectedRoll = {};
+            // return;
 
-        // if (currentlyExpectedRoll.modifier !== 0) {
-        //     console.log("modifiers not supported yet");
-        //     return;
-        // }
+            multiRolls.push(value);
+            if (multiRolls.length === currentlyExpectedRoll.amount) {
+                multiRollComplete = true;
+                amount = currentlyExpectedRoll.amount;
+            }
+        }
 
         modifier = parseInt(currentlyExpectedRoll.modifier);
     }
 
-    let initJson = buildInitialJson(dieType, modifier);
-    socket.send(JSON.stringify(initJson));
+    if (multiRollComplete || Object.keys(currentlyExpectedRoll).length === 0 || currentlyExpectedRoll.amount === 1) {
+        let initJson = buildInitialJson(dieType, modifier, amount);
+        socket.send(JSON.stringify(initJson));
 
-    let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
-    let rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier);
+        let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
+        let rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount);
 
-    setTimeout(() => {
-        console.log("sending value: " + dieValue);
-        socket.send(JSON.stringify(rolledJson));
-    }, 1000);
+        setTimeout(() => {
+            console.log("sending value: " + dieValue);
+            socket.send(JSON.stringify(rolledJson));
+        }, 1000);
 
-    createToast(dieType, value, modifier);
-    // displayDieRoll(dieType, value, modifier);
-    // appendElementToGameLog(rolledJson);
-    rolledJsonArray.push(rolledJson);
-    currentlyExpectedRoll = {};
+        createToast(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], modifier, rolledJson.data.rolls[0].diceNotationStr);
+        // displayDieRoll(dieType, value, modifier);
+        // appendElementToGameLog(rolledJson);
+        rolledJsonArray.push(rolledJson);
+        currentlyExpectedRoll = {};
 
-    if (pixelModeOnlyOnce && pixelMode) {
-        pixelMode = false;
-        document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
-        document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
-            element.parentNode.replaceChild(originalDiceClick[index], element);
-        });
-        originalDiceClick = [];
-        pixelModeOnlyOnce = false;
+        if (pixelModeOnlyOnce && pixelMode) {
+            pixelMode = false;
+            document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+            document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
+                element.parentNode.replaceChild(originalDiceClick[index], element);
+            });
+            originalDiceClick = [];
+            pixelModeOnlyOnce = false;
+        }
+
+        if (multiRollComplete) {
+            multiRolls = [];
+        }
+    } else {
+        console.log("waiting for more rolls");
     }
 }
 
@@ -795,12 +868,17 @@ function updateCurrentPixels() {
 }
 
 function getDieTypeFromButton(button) {
-    let dieType = button.firstChild.getAttribute("aria-label");
-    if (dieType === null) {
-        dieType = button.firstChild.firstChild.innerHTML;
+    let dieType = "";
+    if (typeof button.firstChild === "object" && typeof button.firstChild.data === "string") {
+        dieType = button.firstChild.data;
+    } else {
+        dieType = button.firstChild.getAttribute("aria-label");
+        if (dieType === null) {
+            dieType = button.firstChild.firstChild.innerHTML;
 
-        if (dieType === undefined) {
-            dieType = button.firstChild.innerHTML;
+            if (dieType === undefined) {
+                dieType = button.firstChild.innerHTML;
+            }
         }
     }
 
@@ -823,12 +901,18 @@ function getDieTypeFromButton(button) {
 }
 
 function getModifierFromButton(button) {
-    let modifier = button.firstChild.getAttribute("aria-label");
-    if (modifier === null) {
-        modifier = button.firstChild.firstChild.innerHTML;
+    let modifier = 0;
+    if (typeof button.firstChild === "object" && typeof button.firstChild.data === "string") {
+        modifier = button.firstChild.data;
+    } else {
 
-        if (modifier === undefined) {
-            modifier = button.firstChild.innerHTML;
+        modifier = button.firstChild.getAttribute("aria-label");
+        if (modifier === null) {
+            modifier = button.firstChild.firstChild.innerHTML;
+
+            if (modifier === undefined) {
+                modifier = button.firstChild.innerHTML;
+            }
         }
     }
 
@@ -852,12 +936,17 @@ function getModifierFromButton(button) {
 }
 
 function getAmountFromButton(button) {
-    let amount = button.firstChild.getAttribute("aria-label");
-    if (amount === null) {
-        amount = button.firstChild.firstChild.innerHTML;
+    let amount = 1;
+    if (typeof button.firstChild === "object" && typeof button.firstChild.data === "string") {
+        amount = button.firstChild.data;
+    } else {
+        amount = button.firstChild.getAttribute("aria-label");
+        if (amount === null) {
+            amount = button.firstChild.firstChild.innerHTML;
 
-        if (amount === undefined) {
-            amount = button.firstChild.innerHTML;
+            if (amount === undefined) {
+                amount = button.firstChild.innerHTML;
+            }
         }
     }
 
@@ -916,21 +1005,41 @@ function checkForOpenGameLog() {
 }
 
 
-window.createToast = function (dieType, value, modifier = 0) {
+function createToast(dieType, total, value, modifier = 0, diceNotationStr = undefined) {
     let div = document.createElement("div");
     div.id = generateDnDBeyondId();
 
-    let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"> <div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"> <div class="noty_body"> <div class="dice_result "> <div class="dice_result__info"> <div class="dice_result__info__title"><span class="dice_result__info__rolldetail"> </span><span class="dice_result__rolltype rolltype_roll" style="animation: linear party-time-text 1s infinite;">pixel roll</span></div> <div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span></div><span class="dice_result__info__dicenotation" title="1DIETYPE">1DIETYPE</span> </div> <div class="dice_result__total-container"><span class="dice_result__total-result dice_result__total-result-">VALUE</span></div> </span> </div> </div> <div class="noty_progressbar"></div> </div> </div>'
+    if (diceNotationStr === undefined) {
+        diceNotationStr = "1" + dieType;
+    }
+
+    let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"> <div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"> <div class="noty_body"> <div class="dice_result "> <div class="dice_result__info"> <div class="dice_result__info__title"><span class="dice_result__info__rolldetail"> </span><span class="dice_result__rolltype rolltype_roll" style="animation: linear party-time-text 1s infinite;">pixel roll</span></div> <div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span></div><span class="dice_result__info__dicenotation" title="AMOUNTDIETYPE">DICENOTATIONSTR</span> </div> <div class="dice_result__total-container"><span class="dice_result__total-result dice_result__total-result-">VALUE</span></div> </span> </div> </div> <div class="noty_progressbar"></div> </div> </div>'
     innerDiv = innerDiv.replace("UUID", generateDnDBeyondId());
     innerDiv = innerDiv.replaceAll("DIETYPE", dieType);
+    innerDiv = innerDiv.replaceAll("DICENOTATIONSTR", diceNotationStr);
+
+    let fullValue = "";
+    if (currentlyExpectedRoll.amount > 1) {
+        for (let i = 0; i < currentlyExpectedRoll.amount; i++) {
+            fullValue += multiRolls[i] + "+";
+        }
+        fullValue = fullValue.slice(0, -1);
+    }
+
+    if (fullValue === "") {
+        fullValue = "" + value;
+    }
+
     if (modifier !== 0) {
         if (modifier > 0) {
-            innerDiv = innerDiv.replaceAll("VALUE", value + " + " + modifier + " = " + (value + modifier));
+            innerDiv = innerDiv.replaceAll("VALUE", fullValue + "+" + modifier + " = " + (total));
         } else {
-            innerDiv = innerDiv.replaceAll("VALUE", value + appendSpacesToSignOfNegativeNumbers(modifier) + " = " + (value + modifier));
+            innerDiv = innerDiv.replaceAll("VALUE", fullValue + "" + modifier + " = " + (total));
         }
+    } else if (fullValue.includes("+")) {
+        innerDiv = innerDiv.replaceAll("VALUE", fullValue + " = " + total);
     }
-    innerDiv = innerDiv.replaceAll("VALUE", value);
+    innerDiv = innerDiv.replaceAll("VALUE", fullValue);
 
     div.innerHTML = innerDiv;
     document.querySelector("body").appendChild(div);
@@ -968,6 +1077,8 @@ window.appendElementToGameLog = function (json) {
 window.rollDice = rollDice;
 window.pwc = pixelsWebConnect;
 window.updateCurrentPixels = updateCurrentPixels;
+window.createToast = createToast;
+window.currentlyExpectedRoll = currentlyExpectedRoll;
 
 function GM_addStyle(css) {
     const style = document.getElementById("GM_addStyleBy8626") || (function () {

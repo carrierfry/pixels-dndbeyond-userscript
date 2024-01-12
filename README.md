@@ -40,7 +40,8 @@ Currently, Pixel Mode still has a few bugs when switching to a different tab on 
 - [x] ~~Support other dice than D20s~~
 - [x] ~~Test if it works with pixel dice actually, since I don't have any right now~~
 - [x] ~~Make it possible to automatically add the modifiers to the roll (e.g. +5 for a strength check)~~
-- [ ] Make it possible to throw multiple dice at once (e.g. `2d6+1d4` or d100 rolls with a d10 and a d00)
+- [x] ~~Make it possible to roll multiple dice at once (e.g. `2d6+4`)~~
+- [ ] d100 rolls with a d10 and a d00
 - [x] ~~Show the roll to the user as a toast/popup~~
 - [x] ~~Show the roll in the game log to the user itself (currently only the other players who are in the session can see it live)~~
 
@@ -51,6 +52,7 @@ Currently, Pixel Mode still has a few bugs when switching to a different tab on 
 - Pixel Mode has a few bugs when switching to a different tab on the character sheet (e.g. from `ACTIONS` to `SPELLS`), so it's recommended to disable Pixel Mode before switching tabs!
 - If your character is not in any campaign, the script won't work.
 - If you use [Beyond20](https://beyond20.here-for-more.info/), there are buttons that won't work in pixel mode and the rolls currently won't get sent to Roll20.
+- Healing spells can only be rolled with pixel by using the pixel mode. Other spells can also be rolled with pixel by using `right click -> roll with pixel` on the damage button.
 
 ## Software used
 [Pixels Web Connect](https://github.com/GameWithPixels/pixels-js/tree/main/packages/pixels-web-connect) (via [unpkg](https://unpkg.com/))
