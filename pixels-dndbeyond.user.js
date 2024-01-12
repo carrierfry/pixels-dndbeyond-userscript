@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4
+// @version      0.4.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -248,6 +248,15 @@ const diceMessageRolled = {
     "messageTarget": "1234567"
 }
 
+let toDoLookup = {
+    "d4": "You need to roll x d4!",
+    "d6": "You need to roll x d6!",
+    "d8": "You need to roll x d8!",
+    "d10": "You need to roll x d10!",
+    "d12": "You need to roll x d12!",
+    "d20": "You need to roll x d20!",
+}
+
 let pixelMode = false;
 let originalDiceClick = [];
 let currentlyExpectedRoll = {};
@@ -286,12 +295,15 @@ function main() {
 
     let color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
 
-    GM_addStyle(".ct-character-header-desktop__group--pixels-active{ background-color: " + color + " !important; }");
+    GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color:  ${color} !important; }`);
+    //GM_addStyle(`.pixels-info-box { position: fixed; top: 25%; left: 25%; width: 50%; height: 50%; background-color: rgba(0,0,0,0.5); z-index: 999`);
     addPixelsLogoButton();
     addPixelModeButton();
+    addPixelsInfoBox();
     setInterval(checkForOpenGameLog, 500);
     setInterval(checkForMissingPixelButtons, 1000);
     setInterval(checkForContextMenu, 300);
+    setInterval(checkForTodo, 300);
     setInterval(listenForRightClicks, 300);
 }
 
@@ -315,6 +327,21 @@ function checkForContextMenu() {
         contextMenuShown = true;
     } else {
         contextMenuShown = false;
+    }
+}
+
+function checkForTodo() {
+    if (Object.keys(currentlyExpectedRoll).length !== 0) {
+        // let modifier = currentlyExpectedRoll.modifier;
+        let dieType = currentlyExpectedRoll.dieType;
+        let amount = currentlyExpectedRoll.amount;
+
+        let text = toDoLookup[dieType];
+        text = text.replaceAll("x", amount);
+
+        displayWhatUserNeedsToDo(text);
+    } else {
+        displayWhatUserNeedsToDo();
     }
 }
 
@@ -543,6 +570,7 @@ function rollDice(dieType, value) {
     }, 1000);
 
     createToast(dieType, value, modifier);
+    // displayDieRoll(dieType, value, modifier);
     // appendElementToGameLog(rolledJson);
     rolledJsonArray.push(rolledJson);
     currentlyExpectedRoll = {};
@@ -577,6 +605,8 @@ async function requestMyPixel() {
     });
 
     window.pixels.push(pixel);
+
+    updateCurrentPixels();
 }
 
 function addPixelModeButton() {
@@ -660,6 +690,108 @@ function addPixelModeButton() {
             tootltipShown = false;
         }
     });
+}
+
+function addPixelsInfoBox() {
+    // The info box should live on the left side of the page
+    // It should have a little icon that expands the box when clicked
+    // When clicked again, it should collapse the box
+
+    let div = document.createElement("div");
+    div.className = "pixels-info-box";
+
+    div.innerHTML = '<div class="pixels-info-box__content"> <div class="pixels-info-box__content__title">Pixel Info</div> <div class="pixels-info-box__content__text"> <p id="pixel-amount" class="no-pixel-warning">You currently have no pixel dice connected!</p> <p class="todo_text">You currently have nothing to do!</p> </div> </div>';
+    document.querySelector("body").appendChild(div);
+
+    // add style to the info box (it should be on the left side of the page and be closed by default)
+    // it should expand to the right when opened and be roughly 300px wide
+
+    GM_addStyle(`.pixels-info-box { position: fixed; top: 52px; left: 0%; width: 320px; height: 200px; background-color: rgba(0,0,0,0.90); z-index: 999`);
+    GM_addStyle(`.pixels-info-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
+    GM_addStyle(`.pixels-info-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
+    GM_addStyle(`.pixels-info-box__content__text { position: absolute; top: 10%; left: 0%; width: 100%; height: 90%; font-size: 1em; text-align: center; color: white; overflow-y:auto; }`);
+    GM_addStyle(`.no-pixel-warning { color: yellow; }`);
+
+    // the box should be closed by default
+    div.style.display = "none";
+
+    // add a button that opens and closes the box
+    let button = document.createElement("button");
+    button.className = "pixels-info-box__button";
+    button.innerHTML = '<img src="https://www.google.com/s2/favicons?sz=32&domain=https://gamewithpixels.com/">';
+    button.onclick = (e) => {
+        e.preventDefault();
+        console.log("Pixels info box button clicked");
+
+        if (div.style.display === "none") {
+            div.style.display = "block";
+        } else {
+            div.style.display = "none";
+        }
+    };
+    document.querySelector("body").appendChild(button);
+
+    // add style to the button
+    GM_addStyle(`.pixels-info-box__button { position: fixed; top: 20px; left: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
+
+
+}
+
+function displayDieRoll(dieType, value, modifier = 0) {
+    let div = document.createElement("div");
+    div.id = generateDnDBeyondId();
+
+    let innerDiv = '<div id="roll_list_entry_UUID" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"> <div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"> <div class="noty_body"> <div class="dice_result "> <div class="dice_result__info"> <div class="dice_result__info__title"><span class="dice_result__info__rolldetail"> </span><span class="dice_result__rolltype rolltype_roll" style="animation: linear party-time-text 1s infinite;">pixel roll</span></div> <div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span></div><span class="dice_result__info__dicenotation" title="1DIETYPE">1DIETYPE</span> </div> <div class="dice_result__total-container"><span class="dice_result__total-result dice_result__total-result-">VALUE</span></div> </span> </div> </div> <div class="noty_progressbar"></div> </div> </div>'
+    innerDiv = innerDiv.replace("UUID", generateDnDBeyondId());
+    innerDiv = innerDiv.replaceAll("DIETYPE", dieType);
+    if (modifier !== 0) {
+        if (modifier > 0) {
+            innerDiv = innerDiv.replaceAll("VALUE", value + " + " + modifier + " = " + (value + modifier));
+        } else {
+            innerDiv = innerDiv.replaceAll("VALUE", value + appendSpacesToSignOfNegativeNumbers(modifier) + " = " + (value + modifier));
+        }
+    }
+    innerDiv = innerDiv.replaceAll("VALUE", value);
+
+    div.innerHTML = innerDiv;
+    document.querySelector(".pixels-info-box__content__text").appendChild(div);
+
+    //add styles
+    GM_addStyle(`.dice-icon-die--DIETYPE { background-image: url("https://gamewithpixels.com/dice/DIETYPE.png"); }`);
+    let id = "#" + div.firstChild.id;
+    GM_addStyle(`${id} { margin-top: 5px; }`);
+}
+
+function displayWhatUserNeedsToDo(text = undefined) {
+    if (text === undefined) {
+        text = "You currently have nothing to do!";
+    }
+
+    document.querySelector(".todo_text").innerHTML = text;
+}
+
+function updateCurrentPixels() {
+    let amount = window.pixels.length;
+    let text = "You currently have " + amount + " pixel dice connected!";
+    if (amount === 0) {
+        text = "You currently have no pixel dice connected!";
+    } else {
+        // Now we list how many of each connected dice type we have
+        let diceTypes = {};
+        window.pixels.forEach((pixel) => {
+            if (diceTypes[pixel.dieType] === undefined) {
+                diceTypes[pixel.dieType] = 1;
+            } else {
+                diceTypes[pixel.dieType]++;
+            }
+        });
+
+        text += "<br><br>";
+        for (const [key, value] of Object.entries(diceTypes)) {
+            text += value + "x " + key + "<br>";
+        }
+    }
+    document.querySelector("#pixel-amount").innerHTML = text;
 }
 
 function getDieTypeFromButton(button) {
@@ -835,6 +967,7 @@ window.appendElementToGameLog = function (json) {
 
 window.rollDice = rollDice;
 window.pwc = pixelsWebConnect;
+window.updateCurrentPixels = updateCurrentPixels;
 
 function GM_addStyle(css) {
     const style = document.getElementById("GM_addStyleBy8626") || (function () {
