@@ -299,7 +299,7 @@ function main() {
     let color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
 
     GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color:  ${color} !important; }`);
-    //GM_addStyle(`.pixels-info-box { position: fixed; top: 25%; left: 25%; width: 50%; height: 50%; background-color: rgba(0,0,0,0.5); z-index: 999`);
+    GM_addStyle(`#red-pixel-icon { filter: brightness(30%) sepia(1) saturate(25); }`);
     addPixelsLogoButton();
     addPixelModeButton();
     addPixelsInfoBox();
@@ -686,7 +686,7 @@ function addPixelModeButton() {
     let div = document.createElement("div");
     div.className = "ct-character-header-desktop__group ct-character-header-desktop__group--pixels";
 
-    div.innerHTML = '<div class="ct-character-header-desktop__button" role="button" tabindex="0"> <div class="ct-character-header-desktop__button-icon"> <img src="https://www.google.com/s2/favicons?sz=16&domain=https://gamewithpixels.com/"> </div> <span class="ct-character-header-desktop__button-label">Pixel Mode</span> </div>'
+    div.innerHTML = '<div class="ct-character-header-desktop__button" role="button" tabindex="0"> <div class="ct-character-header-desktop__button-icon"> <img id="red-pixel-icon" src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/img/white.png" width="16px" height="16px"> </div> <span class="ct-character-header-desktop__button-label">Pixel Mode</span> </div>'
     document.querySelector(".ct-character-header-desktop__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-desktop__group--short-rest"));
     div.oncontextmenu = function (e) {
         e.preventDefault();
@@ -779,7 +779,7 @@ function addPixelsInfoBox() {
     // add style to the info box (it should be on the left side of the page and be closed by default)
     // it should expand to the right when opened and be roughly 300px wide
 
-    GM_addStyle(`.pixels-info-box { position: fixed; top: 52px; left: 0%; width: 320px; height: 200px; background-color: rgba(0,0,0,0.90); z-index: 999`);
+    GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 200px; background-color: rgba(0,0,0,0.90); z-index: 999`);
     GM_addStyle(`.pixels-info-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
     GM_addStyle(`.pixels-info-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
     GM_addStyle(`.pixels-info-box__content__text { position: absolute; top: 10%; left: 0%; width: 100%; height: 90%; font-size: 1em; text-align: center; color: white; overflow-y:auto; }`);
@@ -791,7 +791,7 @@ function addPixelsInfoBox() {
     // add a button that opens and closes the box
     let button = document.createElement("button");
     button.className = "pixels-info-box__button";
-    button.innerHTML = '<img src="https://www.google.com/s2/favicons?sz=32&domain=https://gamewithpixels.com/">';
+    button.innerHTML = '<img src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/img/colorful.png" width="32px" height="32px">';
     button.onclick = (e) => {
         e.preventDefault();
         console.log("Pixels info box button clicked");
@@ -805,9 +805,7 @@ function addPixelsInfoBox() {
     document.querySelector("body").appendChild(button);
 
     // add style to the button
-    GM_addStyle(`.pixels-info-box__button { position: fixed; top: 20px; left: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
-
-
+    GM_addStyle(`.pixels-info-box__button { position: fixed; top: 18px; left: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
 }
 
 function displayDieRoll(dieType, value, modifier = 0) {
