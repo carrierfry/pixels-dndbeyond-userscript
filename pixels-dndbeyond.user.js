@@ -335,8 +335,11 @@ function checkForContextMenu() {
     });
 
     if (contextMenu !== null) {
-        addRollWithPixelButton(contextMenu);
-        contextMenuShown = true;
+        let diceToolbar = document.querySelector(".dice-toolbar__dropdown-selected");
+        if (diceToolbar === null) {
+            addRollWithPixelButton(contextMenu);
+            contextMenuShown = true;
+        }
     } else {
         contextMenuShown = false;
     }
