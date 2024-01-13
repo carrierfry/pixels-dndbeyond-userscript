@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.2.2
+// @version      0.4.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -272,6 +272,9 @@ let pixelModeOnlyOnce = false;
 let tootltipShown = false;
 let contextMenuShown = false;
 let lastRightClickedButton = null;
+let doubledAmount = false;
+let last2D20Rolls = [];
+let nextDmgRollIsCrit = false;
 
 // Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
@@ -346,7 +349,19 @@ function checkForTodo() {
         let amount = currentlyExpectedRoll.amount;
 
         let text = toDoLookup[dieType];
-        text = text.replaceAll("x", amount);
+
+        if (currentlyExpectedRoll.advantage) {
+            text += " (Advantage)";
+            text = text.replaceAll("x", (2 * amount));
+        } else if (currentlyExpectedRoll.disadvantage) {
+            text += " (Disadvantage)";
+            text = text.replaceAll("x", (2 * amount));
+        } else if (currentlyExpectedRoll.critical) {
+            text += " (Critical Hit)";
+            text = text.replaceAll("x", (2 * amount));
+        } else {
+            text = text.replaceAll("x", amount);
+        }
 
         displayWhatUserNeedsToDo(text);
     } else {
@@ -357,6 +372,7 @@ function checkForTodo() {
 function addRollWithPixelButton(contextMenu) {
     if (!contextMenuShown) {
         let button = document.createElement("button");
+        button.id = "roll-with-pixels-button";
         button.className = "MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-1kol59t";
         button.setAttribute("tabindex", "0");
         button.setAttribute("type", "button");
@@ -373,10 +389,15 @@ function addRollWithPixelButton(contextMenu) {
             let dieType = getDieTypeFromButton(lastRightClickedButton);
             let amount = getAmountFromButton(lastRightClickedButton);
 
+            let { adv, dis, crit } = determineRollType(e.currentTarget);
+
             currentlyExpectedRoll = {
                 "modifier": modifier,
                 "dieType": dieType,
-                "amount": amount
+                "amount": amount,
+                "advantage": adv,
+                "disadvantage": dis,
+                "critical": crit
             };
 
         };
@@ -423,7 +444,7 @@ function generateDnDBeyondId() {
 // There are two messages that need to be sent to the server to roll a die. The first is the initial message, the second is the rolled message.
 // The initial message is sent with a random rollId, the rolled message is sent with the same rollId as the initial message.
 // These 2 functions build the JSON for those messages.
-function buildInitialJson(dieType, modifier = 0, amount = 1) {
+function buildInitialJson(dieType, modifier = 0, amount = 1, rolltype = "") {
     let json = JSON.parse(JSON.stringify(diceMessageInitial));
     json.id = generateDnDBeyondId();
     json.dateTime = Date.now();
@@ -453,15 +474,19 @@ function buildInitialJson(dieType, modifier = 0, amount = 1) {
     if (modifier !== 0) {
         json.data.rolls[0].diceNotation.constant = modifier;
         if (modifier > 0) {
-            json.data.rolls[0].diceNotationStr = amount + dieType + "+" + modifier;
+            json.data.rolls[0].diceNotationStr = amount + dieType + getDiceNotationStrForRollType(rolltype) + "+" + modifier;
         } else {
-            json.data.rolls[0].diceNotationStr = amount + dieType + modifier;
+            json.data.rolls[0].diceNotationStr = amount + dieType + getDiceNotationStrForRollType(rolltype) + modifier;
         }
+    }
+    json.data.rolls[0].rollKind = rolltype;
+    if (rolltype === "critical") {
+        json.data.rolls[0].rollKind = "critical hit";
     }
     return json;
 }
 
-function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1) {
+function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, rolltype = "") {
     let json = JSON.parse(JSON.stringify(diceMessageRolled));
     json.id = generateDnDBeyondId();
     json.dateTime = Date.now();
@@ -483,13 +508,13 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1) {
     json.data.rolls[0].result.values[0] = dieValue;
     json.data.rolls[0].result.total = dieValue;
     json.data.rolls[0].result.text = dieValue.toString();
-    json.data.rolls[0].diceNotationStr = amount + dieType;
+    json.data.rolls[0].diceNotationStr = amount + getDiceNotationStrForRollType(rolltype) + dieType;
     if (modifier !== 0) {
         json.data.rolls[0].diceNotation.constant = modifier;
         json.data.rolls[0].result.constant = modifier;
         json.data.rolls[0].result.total += modifier;
         if (modifier > 0) {
-            json.data.rolls[0].diceNotationStr = amount + dieType + "+" + modifier;
+            json.data.rolls[0].diceNotationStr = amount + dieType + getDiceNotationStrForRollType(rolltype) + "+" + modifier;
             if (amount > 1) {
                 let clone = JSON.parse(JSON.stringify(json.data.rolls[0].diceNotation.set[0].dice[0]));
                 json.data.rolls[0].diceNotation.set[0].dice = [];
@@ -508,7 +533,7 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1) {
             }
             json.data.rolls[0].result.text += "+" + modifier;
         } else {
-            json.data.rolls[0].diceNotationStr = "" + amount + dieType + modifier;
+            json.data.rolls[0].diceNotationStr = "" + amount + dieType + getDiceNotationStrForRollType(rolltype) + modifier;
             if (amount > 1) {
                 let clone = JSON.parse(JSON.stringify(json.data.rolls[0].diceNotation.set[0].dice[0]));
                 json.data.rolls[0].diceNotation.set[0].dice = [];
@@ -541,6 +566,24 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1) {
             json.data.rolls[0].result.total += multiRolls[i];
         }
         json.data.rolls[0].result.text = json.data.rolls[0].result.text.slice(0, -1);
+    }
+    json.data.rolls[0].rollKind = rolltype;
+    if (rolltype === "critical") {
+        json.data.rolls[0].rollKind = "critical hit";
+    }
+    if (rolltype === "advantage" || rolltype === "disadvantage") {
+        let lastPlusIndex = json.data.rolls[0].result.text.lastIndexOf('+');
+
+        let firstPart = json.data.rolls[0].result.text.substring(0, lastPlusIndex); // "1+2+3"
+        firstPart = firstPart.replaceAll('+', ',');
+        let secondPart = json.data.rolls[0].result.text.substring(lastPlusIndex); // "+4"
+
+        json.data.rolls[0].result.text = "(" + firstPart + ")" + secondPart;
+        if (rolltype === "disadvantage") {
+            json.data.rolls[0].result.total = Math.min(...json.data.rolls[0].result.values) + modifier;
+        } else {
+            json.data.rolls[0].result.total = Math.max(...json.data.rolls[0].result.values) + modifier;
+        }
     }
     return json;
 }
@@ -607,6 +650,14 @@ function rollDice(dieType, value) {
     let modifier = 0;
     let multiRollComplete = false;
     let amount = 1;
+    let forcedMultiRoll = false;
+
+    if (dieType === "d20") {
+        last2D20Rolls.push(value);
+        if (last2D20Rolls.length > 2) {
+            last2D20Rolls.shift();
+        }
+    }
 
     if (Object.keys(currentlyExpectedRoll).length !== 0) {
         if (currentlyExpectedRoll.dieType !== dieType) {
@@ -615,31 +666,67 @@ function rollDice(dieType, value) {
         }
 
         if (currentlyExpectedRoll.amount > 1) {
-            // console.log("multiple dice not supported yet");
-            // currentlyExpectedRoll = {};
-            // return;
-
             multiRolls.push(value);
-            if (multiRolls.length === currentlyExpectedRoll.amount) {
-                multiRollComplete = true;
-                amount = currentlyExpectedRoll.amount;
+            if (currentlyExpectedRoll.advantage || currentlyExpectedRoll.disadvantage || currentlyExpectedRoll.critical) {
+
+                if (!doubledAmount) {
+                    currentlyExpectedRoll.amount = currentlyExpectedRoll.amount * 2;
+                }
+                if (multiRolls.length === currentlyExpectedRoll.amount) {
+                    multiRollComplete = true;
+                    amount = currentlyExpectedRoll.amount;
+                }
+                doubledAmount = true;
+            } else {
+                if (multiRolls.length === currentlyExpectedRoll.amount) {
+                    multiRollComplete = true;
+                    amount = currentlyExpectedRoll.amount;
+                }
             }
+        } else if (currentlyExpectedRoll.amount === 1 && (currentlyExpectedRoll.advantage || currentlyExpectedRoll.disadvantage || currentlyExpectedRoll.critical) && !doubledAmount) {
+            multiRolls.push(value);
+            multiRollComplete = false;
+            currentlyExpectedRoll.amount = currentlyExpectedRoll.amount * 2
+            amount = currentlyExpectedRoll.amount;
+            forcedMultiRoll = true;
+            doubledAmount = true;
         }
 
         modifier = parseInt(currentlyExpectedRoll.modifier);
     }
 
     if (multiRollComplete || Object.keys(currentlyExpectedRoll).length === 0 || currentlyExpectedRoll.amount === 1) {
-        let initJson = buildInitialJson(dieType, modifier, amount);
+        let initJson;
+        if (Object.keys(currentlyExpectedRoll).length > 0) {
+            initJson = buildInitialJson(dieType, modifier, amount, getRollKind());
+        } else {
+            initJson = buildInitialJson(dieType, modifier, amount);
+        }
         socket.send(JSON.stringify(initJson));
 
         let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
-        let rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount);
+
+        let rolledJson;
+        if (Object.keys(currentlyExpectedRoll).length > 0) {
+            rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount, getRollKind());
+        } else {
+            rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount);
+        }
 
         setTimeout(() => {
             console.log("sending value: " + dieValue);
             socket.send(JSON.stringify(rolledJson));
         }, 1000);
+
+        if (Object.keys(currentlyExpectedRoll).length > 0 && (currentlyExpectedRoll.advantage || currentlyExpectedRoll.disadvantage)) {
+            if (currentlyExpectedRoll.advantage && last2D20Rolls.length === 2 && (last2D20Rolls[0] === 20 || last2D20Rolls[1] === 20)) {
+                nextDmgRollIsCrit = true;
+            } else if (currentlyExpectedRoll.disadvantage && last2D20Rolls.length === 2 && (last2D20Rolls[0] === 1 && last2D20Rolls[1] === 1)) {
+                nextDmgRollIsCrit = true;
+            }
+        } else if (Object.keys(currentlyExpectedRoll).length > 0 && last2D20Rolls[last2D20Rolls.length - 1] === 20 && dieType === "d20") {
+            nextDmgRollIsCrit = true;
+        }
 
         createToast(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], modifier, rolledJson.data.rolls[0].diceNotationStr);
         // displayDieRoll(dieType, value, modifier);
@@ -660,6 +747,11 @@ function rollDice(dieType, value) {
         if (multiRollComplete) {
             multiRolls = [];
         }
+        doubledAmount = false;
+
+        document.querySelector("#advButton").style.backgroundColor = "darkgray";
+        document.querySelector("#critButton").style.backgroundColor = "darkgray";
+        document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
     } else {
         console.log("waiting for more rolls");
     }
@@ -727,10 +819,15 @@ function addPixelModeButton() {
                     let dieType = getDieTypeFromButton(elClone);
                     let amount = getAmountFromButton(elClone);
 
+                    let { adv, dis, crit } = determineRollType(e.currentTarget);
+
                     currentlyExpectedRoll = {
                         "modifier": modifier,
                         "dieType": dieType,
-                        "amount": amount
+                        "amount": amount,
+                        "advantage": adv,
+                        "disadvantage": dis,
+                        "critical": crit
                     };
                 };
             });
@@ -779,7 +876,7 @@ function addPixelsInfoBox() {
     let div = document.createElement("div");
     div.className = "pixels-info-box";
 
-    div.innerHTML = '<div class="pixels-info-box__content"> <div class="pixels-info-box__content__title">Pixel Info</div> <div class="pixels-info-box__content__text"> <p id="pixel-amount" class="no-pixel-warning">You currently have no pixel dice connected!</p> <p class="todo_text">You currently have nothing to do!</p> </div> </div>';
+    div.innerHTML = '<div class="pixels-info-box__content"> <div class="pixels-info-box__content__title">Pixel Info</div> <div class="pixels-info-box__content__text"> <p id="pixel-amount" class="no-pixel-warning">You currently have no pixel dice connected!</p> <p class="todo_text">You currently have nothing to do!</p> </div> <div class="pixels-info-box__content__buttons"> <button id="advButton">Adv.</button> <button id="critButton">Crit</button> <button id="disadvButton">Disadv.</button> </div> </div>';
     document.querySelector("body").appendChild(div);
 
     // add style to the info box (it should be on the left side of the page and be closed by default)
@@ -788,8 +885,19 @@ function addPixelsInfoBox() {
     GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 200px; background-color: rgba(0,0,0,0.90); z-index: 999`);
     GM_addStyle(`.pixels-info-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
     GM_addStyle(`.pixels-info-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
-    GM_addStyle(`.pixels-info-box__content__text { position: absolute; top: 10%; left: 0%; width: 100%; height: 90%; font-size: 1em; text-align: center; color: white; overflow-y:auto; }`);
+    GM_addStyle(`.pixels-info-box__content__text { position: absolute; top: 10%; left: 0%; width: 100%; height: 80%; font-size: 1em; text-align: center; color: white; overflow-y:auto; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons { position: absolute; top: 90%; left: 0%; width: 100%; height: 10%; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons button { width: 30%; height: 100%; margin-left: 1%; background-color: darkgray; border: 2px solid; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons #advButton { border-color: lime; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons #critButton { border-color: yellow; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons #disadvButton { border-color: red; }`);
     GM_addStyle(`.no-pixel-warning { color: yellow; }`);
+
+    document.querySelectorAll(".pixels-info-box__content__buttons button").forEach((element) => {
+        element.onclick = (e) => {
+            setRollType(element.id);
+        };
+    });
 
     // the box should be closed by default
     div.style.display = "none";
@@ -1008,6 +1116,100 @@ function checkForOpenGameLog() {
     }
 }
 
+function setRollType(type) {
+    if (Object.keys(currentlyExpectedRoll).length !== 0) {
+        if (type === "advButton" || type === "advantage") {
+            currentlyExpectedRoll.advantage = !currentlyExpectedRoll.advantage;
+            currentlyExpectedRoll.disadvantage = false;
+            currentlyExpectedRoll.critical = false;
+            if (currentlyExpectedRoll.advantage) {
+                document.querySelector("#advButton").style.backgroundColor = "lime";
+                document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+                document.querySelector("#critButton").style.backgroundColor = "darkgray";
+            } else {
+                document.querySelector("#advButton").style.backgroundColor = "darkgray";
+            }
+        } else if (type === "critButton" || type === "critical") {
+            currentlyExpectedRoll.critical = !currentlyExpectedRoll.critical;
+            currentlyExpectedRoll.advantage = false;
+            currentlyExpectedRoll.disadvantage = false;
+            if (currentlyExpectedRoll.critical) {
+                document.querySelector("#critButton").style.backgroundColor = "yellow";
+                document.querySelector("#advButton").style.backgroundColor = "darkgray";
+                document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+            } else {
+                document.querySelector("#critButton").style.backgroundColor = "darkgray";
+            }
+        } else if (type === "disadvButton" || type === "disadvantage") {
+            currentlyExpectedRoll.disadvantage = !currentlyExpectedRoll.disadvantage;
+            currentlyExpectedRoll.advantage = false;
+            currentlyExpectedRoll.critical = false;
+            if (currentlyExpectedRoll.disadvantage) {
+                document.querySelector("#disadvButton").style.backgroundColor = "red";
+                document.querySelector("#advButton").style.backgroundColor = "darkgray";
+                document.querySelector("#critButton").style.backgroundColor = "darkgray";
+            } else {
+                document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+            }
+        } else if (type === "normal") {
+            currentlyExpectedRoll.advantage = false;
+            currentlyExpectedRoll.disadvantage = false;
+            currentlyExpectedRoll.critical = false;
+            document.querySelector("#advButton").style.backgroundColor = "darkgray";
+            document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+            document.querySelector("#critButton").style.backgroundColor = "darkgray";
+        }
+    }
+}
+
+function determineRollType(rollButton) {
+    let adv = false;
+    let dis = false;
+    let crit = false;
+
+    if (!pixelMode) {
+
+        let list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.nextSibling.nextSibling.firstChild; // ul
+        if (list !== null) {
+            let children = list.children;
+            //children.forEach((element) => {
+            for (let i = 0; i < children.length; i++) {
+                let element = children[i];
+                if (element.children[2] !== undefined) {
+                    if (element.children[1].innerHTML.includes("Adv")) {
+                        adv = true;
+                        setRollType("advantage");
+                    } else if (element.children[1].innerHTML.includes("Dis")) {
+                        dis = true;
+                        setRollType("disadvantage");
+                    } else if (element.children[1].innerHTML.includes("Crit")) {
+                        crit = true;
+                        setRollType("critical");
+                    } else {
+                        setRollType("normal");
+                    }
+                }
+            };
+        }
+        if (nextDmgRollIsCrit) {
+            crit = true;
+            nextDmgRollIsCrit = false;
+        }
+    }
+    return { adv, dis, crit };
+}
+
+function getRollKind() {
+    if (currentlyExpectedRoll.advantage) {
+        return "advantage";
+    } else if (currentlyExpectedRoll.disadvantage) {
+        return "disadvantage";
+    } else if (currentlyExpectedRoll.critical) {
+        return "critical";
+    } else {
+        return "";
+    }
+}
 
 function createToast(dieType, total, value, modifier = 0, diceNotationStr = undefined) {
     let div = document.createElement("div");
@@ -1024,10 +1226,19 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
 
     let fullValue = "";
     if (currentlyExpectedRoll.amount > 1) {
-        for (let i = 0; i < currentlyExpectedRoll.amount; i++) {
-            fullValue += multiRolls[i] + "+";
+        if (currentlyExpectedRoll.advantage || currentlyExpectedRoll.disadvantage) {
+            fullValue += "(";
+            for (let i = 0; i < currentlyExpectedRoll.amount; i++) {
+                fullValue += multiRolls[i] + ",";
+            }
+            fullValue = fullValue.slice(0, -1);
+            fullValue += ")";
+        } else {
+            for (let i = 0; i < currentlyExpectedRoll.amount; i++) {
+                fullValue += multiRolls[i] + "+";
+            }
+            fullValue = fullValue.slice(0, -1);
         }
-        fullValue = fullValue.slice(0, -1);
     }
 
     if (fullValue === "") {
@@ -1111,6 +1322,18 @@ function getPageTopLeft(el) {
         left: rect.left + (window.pageXOffset || docEl.scrollLeft || 0),
         top: rect.top + (window.pageYOffset || docEl.scrollTop || 0)
     };
+}
+
+function getDiceNotationStrForRollType(rollType) {
+    if (rollType === "advantage") {
+        return "kh1";
+    } else if (rollType === "disadvantage") {
+        return "kl1";
+    } else if (rollType === "critical") {
+        return "";
+    } else {
+        return "";
+    }
 }
 
 function displayTooltip(tooltipText, x, y) {
