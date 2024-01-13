@@ -768,11 +768,21 @@ async function requestMyPixel() {
     console.log("Connecting...");
     await repeatConnect(pixel);
 
+    if (pixel.dieType === "d6fudge") {
+        await pixel.disconnect();
+        console.log("Fudge dice are not supported! Die disconnected.");
+        return;
+    }
+
     pixel.addEventListener("roll", (face) => {
         console.log(`=> rolled face: ${face}`);
 
         // For now only D20, other dice in the future when I have my own dice and can explore the data structures :(
-        rollDice(pixel.dieType, face);
+        if (pixel.dieType === "d6pipped") {
+            rollDice("d6", face);
+        } else {
+            rollDice(pixel.dieType, face);
+        }
     });
 
     window.pixels.push(pixel);
