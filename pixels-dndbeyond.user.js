@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.2.1
+// @version      0.4.2.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -323,7 +323,13 @@ function checkForMissingPixelButtons() {
 }
 
 function checkForContextMenu() {
-    let contextMenu = document.querySelector(".MuiPaper-root");
+    let contextMenus = document.querySelectorAll(".MuiPopover-paper");
+    let contextMenu = null;
+    contextMenus.forEach((element) => {
+        if (element.innerHTML.includes("Send To:")) {
+            contextMenu = element;
+        }
+    });
 
     if (contextMenu !== null) {
         addRollWithPixelButton(contextMenu);
