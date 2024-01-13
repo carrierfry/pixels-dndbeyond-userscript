@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.3.1
+// @version      0.4.3.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -572,7 +572,12 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
         json.data.rolls[0].rollKind = "critical hit";
     }
     if (rolltype === "advantage" || rolltype === "disadvantage") {
-        let lastPlusIndex = json.data.rolls[0].result.text.lastIndexOf('+');
+        let lastPlusIndex;
+        if (modifier < 0) {
+            lastPlusIndex = json.data.rolls[0].result.text.lastIndexOf('-');
+        } else {
+            lastPlusIndex = json.data.rolls[0].result.text.lastIndexOf('+');
+        }
 
         let firstPart = json.data.rolls[0].result.text.substring(0, lastPlusIndex); // "1+2+3"
         firstPart = firstPart.replaceAll('+', ',');
@@ -1364,4 +1369,29 @@ function displayTooltip(tooltipText, x, y) {
     tooltip.innerHTML = innerHTML;
 
     document.querySelector("body").appendChild(tooltip);
+}
+
+// Don't use this yet! It's not working properly
+function reorderGamelog() {
+    let gameLog = document.querySelector("[class*='GameLogEntries']");
+    let children = gameLog.children;
+    let newChildren = [];
+    for (let i = children.length - 1; i >= 0; i--) {
+        newChildren.push(children[i]);
+    }
+    newChildren.sort((a, b) => {
+        if (a.lastChild.children.length === 0) {
+            return 1;
+        } else if (b.lastChild.children.length === 0) {
+            return 1;
+        }
+        let datetimeA = new Date(a.lastChild.children[a.lastChild.children.length - 1].getAttribute("datetime"));
+        let datetimeB = new Date(b.lastChild.children[a.lastChild.children.length - 1].getAttribute("datetime"));
+        return datetimeB - datetimeA;
+    });
+
+    gameLog.innerHTML = "";
+    newChildren.forEach((element) => {
+        gameLog.appendChild(element);
+    });
 }
