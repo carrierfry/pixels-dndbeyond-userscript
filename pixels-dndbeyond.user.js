@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.4.1
+// @version      0.4.4.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1367,16 +1367,26 @@ window.appendElementToGameLog = function (json) {
     innerDiv = innerDiv.replaceAll("COMBINED", json.data.rolls[0].result.text);
     innerDiv = innerDiv.replaceAll("DICE_NOTATION", json.data.rolls[0].diceNotationStr);
     innerDiv = innerDiv.replaceAll("VALUE", json.data.rolls[0].result.total);
-    // date time in this format: 2024-01-08T20:01:30+01:00
-    innerDiv = innerDiv.replaceAll("DATETIME", new Date(json.dateTime).toISOString());
-    // date time in this format: 1/8/2024 8:01 PM (force AM/PM)
-    innerDiv = innerDiv.replaceAll("DATETIME_HUMAN", new Date(json.dateTime).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }));
+    // date time in this format: "1/14/2024 6:29 PM" (force AM/PM)
+    innerDiv = innerDiv.replaceAll("DATETIME_HUMAN", new Date(json.dateTime).toLocaleString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', hour12: true }).replace(', ', ' '));
     // time in this format: 8:01 PM (force AM/PM)
     innerDiv = innerDiv.replaceAll("TIME_HUMAN", new Date(json.dateTime).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }).split(",")[0]);
+    // date time in this format: 2024-01-08T20:01:30+01:00
+    innerDiv = innerDiv.replaceAll("DATETIME", toISOStringWithTimezone(new Date(json.dateTime)));
 
     element.innerHTML = innerDiv;
 
     gameLog.prepend(element);
+}
+
+function toISOStringWithTimezone(date) {
+    const pad = (num) => String(num).padStart(2, '0');
+    const timezoneOffset = -date.getTimezoneOffset();
+    const sign = timezoneOffset >= 0 ? '+' : '-';
+    const hours = pad(Math.abs(Math.floor(timezoneOffset / 60)));
+    const minutes = pad(Math.abs(timezoneOffset % 60));
+
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}${sign}${hours}:${minutes}`;
 }
 
 window.rollDice = rollDice;
