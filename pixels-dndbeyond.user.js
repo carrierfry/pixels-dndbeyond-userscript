@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.3.3
+// @version      0.4.3.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1209,10 +1209,10 @@ function determineRollType(rollButton) {
                 }
             };
         }
-        if (nextDmgRollIsCrit) {
-            crit = true;
-            nextDmgRollIsCrit = false;
-        }
+        // if (nextDmgRollIsCrit) {
+        //     crit = true;
+        //     nextDmgRollIsCrit = false;
+        // }
     }
     return { adv, dis, crit };
 }
