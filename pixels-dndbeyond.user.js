@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.4.2
+// @version      0.4.4.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -350,7 +350,7 @@ function checkForTodo() {
     if (Object.keys(currentlyExpectedRoll).length !== 0) {
         // let modifier = currentlyExpectedRoll.modifier;
         let dieType = currentlyExpectedRoll.dieType;
-        let amount = currentlyExpectedRoll.amount;
+        let amount = currentlyExpectedRoll.origAmount;
 
         let text = toDoLookup[dieType];
 
@@ -399,6 +399,7 @@ function addRollWithPixelButton(contextMenu) {
                 "modifier": modifier,
                 "dieType": dieType,
                 "amount": amount,
+                "origAmount": amount,
                 "advantage": adv,
                 "disadvantage": dis,
                 "critical": crit
@@ -491,6 +492,7 @@ function handleMouseLeave(e) {
                     "modifier": modifier,
                     "dieType": dieType,
                     "amount": amount,
+                    "origAmount": amount,
                     "advantage": adv,
                     "disadvantage": dis,
                     "critical": crit
