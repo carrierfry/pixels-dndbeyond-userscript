@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.3.4
+// @version      0.4.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -311,6 +311,7 @@ function main() {
     setInterval(checkForContextMenu, 300);
     setInterval(checkForTodo, 300);
     setInterval(listenForRightClicks, 300);
+    setInterval(listenForMouseOverOfNavItems, 300);
 }
 
 function checkForMissingPixelButtons() {
@@ -426,6 +427,76 @@ function handleRightClick(e) {
         console.log("Dice right clicked");
 
         lastRightClickedButton = e.currentTarget;
+    }
+}
+
+function listenForMouseOverOfNavItems() {
+    let navItems = document.querySelectorAll(".ddbc-tab-list__nav-item");
+    navItems.forEach((element) => {
+        element.removeEventListener('mouseenter', handleMouseEnter);
+        element.removeEventListener('mouseleave', handleMouseLeave);
+
+        element.addEventListener('mouseenter', handleMouseEnter);
+        element.addEventListener('mouseleave', handleMouseLeave);
+    });
+
+    let optionsHeader = document.querySelectorAll(".ddbc-tab-options__header");
+    optionsHeader.forEach((element) => {
+        element.removeEventListener('mouseenter', handleMouseEnter);
+        element.removeEventListener('mouseleave', handleMouseLeave);
+
+        element.addEventListener('mouseenter', handleMouseEnter);
+        element.addEventListener('mouseleave', handleMouseLeave);
+    });
+}
+
+function handleMouseEnter(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    // console.log("Nav item hovered");
+
+    if (pixelMode) {
+        document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
+            element.parentNode.replaceChild(originalDiceClick[index], element);
+        });
+
+        originalDiceClick = [];
+    }
+}
+
+function handleMouseLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    // console.log("Nav item left");
+
+    if (pixelMode) {
+        document.querySelectorAll(".integrated-dice__container").forEach((element) => {
+            originalDiceClick.push(element);
+
+            let elClone = element.cloneNode(true);
+
+            element.parentNode.replaceChild(elClone, element);
+            elClone.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log("Dice clicked");
+
+                let modifier = getModifierFromButton(elClone);
+                let dieType = getDieTypeFromButton(elClone);
+                let amount = getAmountFromButton(elClone);
+
+                let { adv, dis, crit } = determineRollType(e.currentTarget);
+
+                currentlyExpectedRoll = {
+                    "modifier": modifier,
+                    "dieType": dieType,
+                    "amount": amount,
+                    "advantage": adv,
+                    "disadvantage": dis,
+                    "critical": crit
+                };
+            };
+        });
     }
 }
 
