@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.4.3
+// @version      0.4.4.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1311,7 +1311,8 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
         diceNotationStr = "1" + dieType;
     }
 
-    let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"> <div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"> <div class="noty_body"> <div class="dice_result "> <div class="dice_result__info"> <div class="dice_result__info__title"><span class="dice_result__info__rolldetail"> </span><span class="dice_result__rolltype rolltype_roll" style="animation: linear party-time-text 1s infinite;">pixel roll</span></div> <div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span></div><span class="dice_result__info__dicenotation" title="AMOUNTDIETYPE">DICENOTATIONSTR</span> </div> <div class="dice_result__total-container"><span class="dice_result__total-result dice_result__total-result-">VALUE</span></div> </span> </div> </div> <div class="noty_progressbar"></div> </div> </div>'
+    // let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"> <div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"> <div class="noty_body"> <div class="dice_result "> <div class="dice_result__info"> <div class="dice_result__info__title"><span class="dice_result__info__rolldetail"> </span><span class="dice_result__rolltype rolltype_roll" style="animation: linear party-time-text 1s infinite;">pixel roll</span></div> <div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span></div><span class="dice_result__info__dicenotation" title="AMOUNTDIETYPE">DICENOTATIONSTR</span> </div> <div class="dice_result__total-container"><span class="dice_result__total-result dice_result__total-result-">VALUE</span></div> </span> </div> </div> <div class="noty_progressbar"></div> </div> </div>'
+    let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"><div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"><div class="noty_body"><div class="dice_result CRITICAL"><div class="dice_result__info"><div class="dice_result__info__title"><span class="dice_result__info__rolldetail">custom: </span><span class="dice_result__rolltype rolltype_roll">roll</span></div><div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span><span class="dice_result__info__breakdown" title="VALUE">VALUE</span></div><span class="dice_result__info__dicenotation" title="DICENOTATIONSTR">DICENOTATIONSTR</span></div><span class="dice_result__divider dice_result__divider--"></span><div class="dice_result__total-container">ROLLTYPE<span class="dice_result__total-result dice_result__total-result-">TOTAL</span></div></div></div><div class="noty_progressbar"></div></div></div>';
     innerDiv = innerDiv.replace("UUID", generateDnDBeyondId());
     innerDiv = innerDiv.replaceAll("DIETYPE", dieType);
     innerDiv = innerDiv.replaceAll("DICENOTATIONSTR", diceNotationStr);
@@ -1339,14 +1340,29 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
 
     if (modifier !== 0) {
         if (modifier > 0) {
-            innerDiv = innerDiv.replaceAll("VALUE", fullValue + "+" + modifier + " = " + (total));
+            // innerDiv = innerDiv.replaceAll("VALUE", fullValue + "+" + modifier + " = " + (total));
+            innerDiv = innerDiv.replaceAll("VALUE", fullValue + "+" + modifier);
         } else {
-            innerDiv = innerDiv.replaceAll("VALUE", fullValue + "" + modifier + " = " + (total));
+            // innerDiv = innerDiv.replaceAll("VALUE", fullValue + "" + modifier + " = " + (total));
+            innerDiv = innerDiv.replaceAll("VALUE", fullValue + "" + modifier);
         }
     } else if (fullValue.includes("+")) {
-        innerDiv = innerDiv.replaceAll("VALUE", fullValue + " = " + total);
+        innerDiv = innerDiv.replaceAll("VALUE", fullValue);
     }
     innerDiv = innerDiv.replaceAll("VALUE", fullValue);
+
+    innerDiv = innerDiv.replaceAll("TOTAL", total);
+
+    if (currentlyExpectedRoll.advantage) {
+        innerDiv = innerDiv.replaceAll("ROLLTYPE", '<span class="dice_result__total-header dice_result__total-header--advantage">+ADV</span>');
+    } else if (currentlyExpectedRoll.disadvantage) {
+        innerDiv = innerDiv.replaceAll("ROLLTYPE", '<span class="dice_result__total-header dice_result__total-header--disadvantage">-DIS</span>');
+    } else if (currentlyExpectedRoll.critical) {
+        innerDiv = innerDiv.replaceAll("ROLLTYPE", '<span class="dice_result__total-header dice_result__total-header--crit">CRIT</span>');
+        innerDiv = innerDiv.replaceAll("CRITICAL", "dice_result--crit");
+    } else {
+        innerDiv = innerDiv.replaceAll("ROLLTYPE", "");
+    }
 
     div.innerHTML = innerDiv;
     document.querySelector("body").appendChild(div);
