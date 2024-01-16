@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.5.1
+// @version      0.4.5.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -425,9 +425,9 @@ function addRollWithPixelButton(contextMenu) {
 
 function listenForRightClicks() {
     document.querySelectorAll(".integrated-dice__container").forEach((element) => {
-        element.removeEventListener('mouseup', handleRightClick);
+        element.removeEventListener('mousedown', handleRightClick);
 
-        element.addEventListener('mouseup', handleRightClick);
+        element.addEventListener('mousedown', handleRightClick);
     });
 }
 
