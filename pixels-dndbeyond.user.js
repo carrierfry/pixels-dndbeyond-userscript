@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.5
+// @version      0.4.5.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -931,6 +931,7 @@ function addPixelModeButton() {
                             "modifier": modifier,
                             "dieType": dieType,
                             "amount": amount,
+                            "origAmount": amount,
                             "advantage": adv,
                             "disadvantage": dis,
                             "critical": crit
