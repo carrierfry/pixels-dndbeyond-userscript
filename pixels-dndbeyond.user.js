@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.4.4
+// @version      0.4.5
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -275,6 +275,7 @@ let lastRightClickedButton = null;
 let doubledAmount = false;
 let last2D20Rolls = [];
 let nextDmgRollIsCrit = false;
+let beyond20Installed = false;
 
 // Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
@@ -299,9 +300,12 @@ function main() {
         return;
     }
 
+    checkIfBeyond20Installed();
+
     let color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
 
     GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color:  ${color} !important; }`);
+    GM_addStyle(`.ct-character-header-desktop__group--pixels-not-available { cursor: default !important; background-color: darkgray !important; border-color: darkgray !important; }`);
     GM_addStyle(`#red-pixel-icon { filter: brightness(30%) sepia(1) saturate(25); }`);
     addPixelsLogoButton();
     addPixelModeButton();
@@ -312,6 +316,14 @@ function main() {
     setInterval(checkForTodo, 300);
     setInterval(listenForRightClicks, 300);
     setInterval(listenForMouseOverOfNavItems, 300);
+}
+
+function checkIfBeyond20Installed() {
+    let beyond20 = document.querySelector(".ct-beyond20-settings-button");
+    if (beyond20 !== null) {
+        beyond20Installed = true;
+    }
+
 }
 
 function checkForMissingPixelButtons() {
@@ -882,58 +894,63 @@ function addPixelModeButton() {
         e.preventDefault();
     }
 
-    div.addEventListener('mouseup', function (e) {
-        e.preventDefault();
-        console.log("Pixels button clicked");
+    if (!beyond20Installed) {
 
-        //e.button describes the mouse button that was clicked
-        // 0 is left, 1 is middle, 2 is right
-        if (e.button == 0) {
-            pixelModeOnlyOnce = true;
-        }
+        div.addEventListener('mouseup', function (e) {
+            e.preventDefault();
+            console.log("Pixels button clicked");
 
-        pixelMode = !pixelMode;
-        if (pixelMode) {
-            div.firstChild.classList.add("ct-character-header-desktop__group--pixels-active");
+            //e.button describes the mouse button that was clicked
+            // 0 is left, 1 is middle, 2 is right
+            if (e.button == 0) {
+                pixelModeOnlyOnce = true;
+            }
 
-            document.querySelectorAll(".integrated-dice__container").forEach((element) => {
-                originalDiceClick.push(element);
+            pixelMode = !pixelMode;
+            if (pixelMode) {
+                div.firstChild.classList.add("ct-character-header-desktop__group--pixels-active");
 
-                let elClone = element.cloneNode(true);
+                document.querySelectorAll(".integrated-dice__container").forEach((element) => {
+                    originalDiceClick.push(element);
 
-                element.parentNode.replaceChild(elClone, element);
-                elClone.onclick = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log("Dice clicked");
+                    let elClone = element.cloneNode(true);
 
-                    let modifier = getModifierFromButton(elClone);
-                    let dieType = getDieTypeFromButton(elClone);
-                    let amount = getAmountFromButton(elClone);
+                    element.parentNode.replaceChild(elClone, element);
+                    elClone.onclick = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log("Dice clicked");
 
-                    let { adv, dis, crit } = determineRollType(e.currentTarget);
+                        let modifier = getModifierFromButton(elClone);
+                        let dieType = getDieTypeFromButton(elClone);
+                        let amount = getAmountFromButton(elClone);
 
-                    currentlyExpectedRoll = {
-                        "modifier": modifier,
-                        "dieType": dieType,
-                        "amount": amount,
-                        "advantage": adv,
-                        "disadvantage": dis,
-                        "critical": crit
+                        let { adv, dis, crit } = determineRollType(e.currentTarget);
+
+                        currentlyExpectedRoll = {
+                            "modifier": modifier,
+                            "dieType": dieType,
+                            "amount": amount,
+                            "advantage": adv,
+                            "disadvantage": dis,
+                            "critical": crit
+                        };
                     };
-                };
-            });
-        } else {
-            div.firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+                });
+            } else {
+                div.firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
 
-            document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
-                element.parentNode.replaceChild(originalDiceClick[index], element);
-            });
+                document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
+                    element.parentNode.replaceChild(originalDiceClick[index], element);
+                });
 
-            originalDiceClick = [];
-            pixelModeOnlyOnce = false;
-        }
-    });
+                originalDiceClick = [];
+                pixelModeOnlyOnce = false;
+            }
+        });
+    } else {
+        div.firstChild.classList.add("ct-character-header-desktop__group--pixels-not-available");
+    }
 
     div.addEventListener('mouseover', function (e) {
         e.preventDefault();
@@ -943,8 +960,12 @@ function addPixelModeButton() {
 
             let topleft = getPageTopLeft(div);
 
-            displayTooltip("Left click to enable pixel mode for 1 roll.<br>Right click to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
-            //displayTooltip("Test", topleft.left, topleft.top);
+            if (!beyond20Installed) {
+                displayTooltip("Left click to enable pixel mode for 1 roll.<br>Right click to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
+            } else {
+                displayTooltip("Pixel Mode is not available when Beyond20 is installed<br>Use the right click menu instead or disable Beyond20", parseInt(topleft.left), parseInt(topleft.top) - 75);
+            }
+
             tootltipShown = true;
         }
     });
