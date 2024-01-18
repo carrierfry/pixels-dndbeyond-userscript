@@ -17,7 +17,9 @@ These are the browsers we have tested and confirmed to work:
 - Microsoft Edge
 - Vivaldi
 
-⚠️⚠️⚠️ **Safari, Firefox, Brave and Opera are not supported** yet, as they either don't support the Bluetooth Web API yet or disabled it on purpose! ⚠️⚠️⚠️
+Brave also works, but only after manually enabling the Bluetooth Web API flag. You can do so here: `brave://flags/#brave-web-bluetooth-api`!
+
+⚠️⚠️⚠️ **Safari, Firefox and Opera are not supported** yet, as they either don't support the Bluetooth Web API yet or disabled it on purpose! ⚠️⚠️⚠️
 
 ## How to use
 1. Install [Tampermonkey](https://www.tampermonkey.net/) into your browser (make sure to use this link, as some browsers block Tampermonkey if it get's added via the chrome web store. When you follow this link, you get a button to install Tampermonkey from the respective browser's web store)
