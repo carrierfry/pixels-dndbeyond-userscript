@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.6.2
+// @version      0.4.6.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -675,6 +675,8 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
         let lastPlusIndex;
         if (modifier < 0) {
             lastPlusIndex = json.data.rolls[0].result.text.lastIndexOf('-');
+        } else if (modifier === 0) {
+            lastPlusIndex = json.data.rolls[0].result.text.length;
         } else {
             lastPlusIndex = json.data.rolls[0].result.text.lastIndexOf('+');
         }
