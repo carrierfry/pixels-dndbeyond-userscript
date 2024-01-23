@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.6
+// @version      0.4.6.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -614,7 +614,7 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
         json.data.rolls[0].result.constant = modifier;
         json.data.rolls[0].result.total += modifier;
         if (modifier > 0) {
-            json.data.rolls[0].diceNotationStr = amount + dieType + getDiceNotationStrForRollType(rolltype) + "+" + modifier;
+            json.data.rolls[0].diceNotationStr = amount + dieType + getDiceNotationStrForRollType(rollkind) + "+" + modifier;
             if (amount > 1) {
                 let clone = JSON.parse(JSON.stringify(json.data.rolls[0].diceNotation.set[0].dice[0]));
                 json.data.rolls[0].diceNotation.set[0].dice = [];
