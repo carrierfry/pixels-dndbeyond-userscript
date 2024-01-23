@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.6.3
+// @version      0.4.6.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -684,6 +684,10 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
         let firstPart = json.data.rolls[0].result.text.substring(0, lastPlusIndex); // "1+2+3"
         firstPart = firstPart.replaceAll('+', ',');
         let secondPart = json.data.rolls[0].result.text.substring(lastPlusIndex); // "+4"
+
+        if (secondPart[0] === '-') {
+            secondPart = "+" + secondPart;
+        }
 
         json.data.rolls[0].result.text = "(" + firstPart + ")" + secondPart;
         if (rollkind === "disadvantage") {
@@ -1417,7 +1421,7 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
             innerDiv = innerDiv.replaceAll("VALUE", fullValue + "+" + modifier);
         } else {
             // innerDiv = innerDiv.replaceAll("VALUE", fullValue + "" + modifier + " = " + (total));
-            innerDiv = innerDiv.replaceAll("VALUE", fullValue + "" + modifier);
+            innerDiv = innerDiv.replaceAll("VALUE", fullValue + "+" + modifier);
         }
     } else if (fullValue.includes("+")) {
         innerDiv = innerDiv.replaceAll("VALUE", fullValue);
