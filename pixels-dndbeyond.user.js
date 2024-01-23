@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.5.2
+// @version      0.4.6
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -404,6 +404,8 @@ function addRollWithPixelButton(contextMenu) {
             let modifier = getModifierFromButton(lastRightClickedButton);
             let dieType = getDieTypeFromButton(lastRightClickedButton);
             let amount = getAmountFromButton(lastRightClickedButton);
+            let rollType = getRollTypeFromButton(lastRightClickedButton);
+            let rollName = getRollNameFromButton(lastRightClickedButton);
 
             let { adv, dis, crit } = determineRollType(e.currentTarget);
 
@@ -414,7 +416,9 @@ function addRollWithPixelButton(contextMenu) {
                 "origAmount": amount,
                 "advantage": adv,
                 "disadvantage": dis,
-                "critical": crit
+                "critical": crit,
+                "rollType": rollType,
+                "rollName": rollName
             };
 
         };
@@ -497,6 +501,8 @@ function handleMouseLeave(e) {
                 let modifier = getModifierFromButton(elClone);
                 let dieType = getDieTypeFromButton(elClone);
                 let amount = getAmountFromButton(elClone);
+                let rollType = getRollTypeFromButton(lastRightClickedButton);
+                let rollName = getRollNameFromButton(lastRightClickedButton);
 
                 let { adv, dis, crit } = determineRollType(e.currentTarget);
 
@@ -507,7 +513,9 @@ function handleMouseLeave(e) {
                     "origAmount": amount,
                     "advantage": adv,
                     "disadvantage": dis,
-                    "critical": crit
+                    "critical": crit,
+                    "rollType": rollType,
+                    "rollName": rollName
                 };
             };
         });
@@ -532,7 +540,7 @@ function generateDnDBeyondId() {
 // There are two messages that need to be sent to the server to roll a die. The first is the initial message, the second is the rolled message.
 // The initial message is sent with a random rollId, the rolled message is sent with the same rollId as the initial message.
 // These 2 functions build the JSON for those messages.
-function buildInitialJson(dieType, modifier = 0, amount = 1, rolltype = "") {
+function buildInitialJson(dieType, modifier = 0, amount = 1, rollkind = "", rolltype = "roll", action = "custom") {
     let json = JSON.parse(JSON.stringify(diceMessageInitial));
     json.id = generateDnDBeyondId();
     json.dateTime = Date.now();
@@ -562,19 +570,23 @@ function buildInitialJson(dieType, modifier = 0, amount = 1, rolltype = "") {
     if (modifier !== 0) {
         json.data.rolls[0].diceNotation.constant = modifier;
         if (modifier > 0) {
-            json.data.rolls[0].diceNotationStr = amount + dieType + getDiceNotationStrForRollType(rolltype) + "+" + modifier;
+            json.data.rolls[0].diceNotationStr = amount + dieType + getDiceNotationStrForRollType(rollkind) + "+" + modifier;
         } else {
-            json.data.rolls[0].diceNotationStr = amount + dieType + getDiceNotationStrForRollType(rolltype) + modifier;
+            json.data.rolls[0].diceNotationStr = amount + dieType + getDiceNotationStrForRollType(rollkind) + modifier;
         }
     }
-    json.data.rolls[0].rollKind = rolltype;
-    if (rolltype === "critical") {
+    json.data.rolls[0].rollKind = rollkind;
+    if (rollkind === "critical") {
         json.data.rolls[0].rollKind = "critical hit";
+    }
+    if (rolltype !== "roll") {
+        json.data.action = action;
+        json.data.rolls[0].rollType = rolltype;
     }
     return json;
 }
 
-function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, rolltype = "") {
+function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, rollkind = "", rolltype = "roll", action = "custom") {
     let json = JSON.parse(JSON.stringify(diceMessageRolled));
     json.id = generateDnDBeyondId();
     json.dateTime = Date.now();
@@ -596,7 +608,7 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
     json.data.rolls[0].result.values[0] = dieValue;
     json.data.rolls[0].result.total = dieValue;
     json.data.rolls[0].result.text = dieValue.toString();
-    json.data.rolls[0].diceNotationStr = amount + getDiceNotationStrForRollType(rolltype) + dieType;
+    json.data.rolls[0].diceNotationStr = amount + getDiceNotationStrForRollType(rollkind) + dieType;
     if (modifier !== 0) {
         json.data.rolls[0].diceNotation.constant = modifier;
         json.data.rolls[0].result.constant = modifier;
@@ -621,7 +633,7 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
             }
             json.data.rolls[0].result.text += "+" + modifier;
         } else {
-            json.data.rolls[0].diceNotationStr = "" + amount + dieType + getDiceNotationStrForRollType(rolltype) + modifier;
+            json.data.rolls[0].diceNotationStr = "" + amount + dieType + getDiceNotationStrForRollType(rollkind) + modifier;
             if (amount > 1) {
                 let clone = JSON.parse(JSON.stringify(json.data.rolls[0].diceNotation.set[0].dice[0]));
                 json.data.rolls[0].diceNotation.set[0].dice = [];
@@ -655,11 +667,11 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
         }
         json.data.rolls[0].result.text = json.data.rolls[0].result.text.slice(0, -1);
     }
-    json.data.rolls[0].rollKind = rolltype;
-    if (rolltype === "critical") {
+    json.data.rolls[0].rollKind = rollkind;
+    if (rollkind === "critical") {
         json.data.rolls[0].rollKind = "critical hit";
     }
-    if (rolltype === "advantage" || rolltype === "disadvantage") {
+    if (rollkind === "advantage" || rollkind === "disadvantage") {
         let lastPlusIndex;
         if (modifier < 0) {
             lastPlusIndex = json.data.rolls[0].result.text.lastIndexOf('-');
@@ -672,11 +684,15 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
         let secondPart = json.data.rolls[0].result.text.substring(lastPlusIndex); // "+4"
 
         json.data.rolls[0].result.text = "(" + firstPart + ")" + secondPart;
-        if (rolltype === "disadvantage") {
+        if (rollkind === "disadvantage") {
             json.data.rolls[0].result.total = Math.min(...json.data.rolls[0].result.values) + modifier;
         } else {
             json.data.rolls[0].result.total = Math.max(...json.data.rolls[0].result.values) + modifier;
         }
+    }
+    if (rolltype !== "roll") {
+        json.data.action = action;
+        json.data.rolls[0].rollType = rolltype;
     }
     return json;
 }
@@ -791,7 +807,7 @@ function rollDice(dieType, value) {
     if (multiRollComplete || Object.keys(currentlyExpectedRoll).length === 0 || currentlyExpectedRoll.amount === 1) {
         let initJson;
         if (Object.keys(currentlyExpectedRoll).length > 0) {
-            initJson = buildInitialJson(dieType, modifier, amount, getRollKind());
+            initJson = buildInitialJson(dieType, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName);
         } else {
             initJson = buildInitialJson(dieType, modifier, amount);
         }
@@ -801,7 +817,7 @@ function rollDice(dieType, value) {
 
         let rolledJson;
         if (Object.keys(currentlyExpectedRoll).length > 0) {
-            rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount, getRollKind());
+            rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName);
         } else {
             rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount);
         }
@@ -924,6 +940,8 @@ function addPixelModeButton() {
                         let modifier = getModifierFromButton(elClone);
                         let dieType = getDieTypeFromButton(elClone);
                         let amount = getAmountFromButton(elClone);
+                        let rollType = getRollTypeFromButton(elClone);
+                        let rollName = getRollNameFromButton(elClone);
 
                         let { adv, dis, crit } = determineRollType(e.currentTarget);
 
@@ -934,7 +952,9 @@ function addPixelModeButton() {
                             "origAmount": amount,
                             "advantage": adv,
                             "disadvantage": dis,
-                            "critical": crit
+                            "critical": crit,
+                            "rollType": rollType,
+                            "rollName": rollName
                         };
                     };
                 });
@@ -1193,6 +1213,25 @@ function getAmountFromButton(button) {
     return amount;
 }
 
+function getRollNameFromButton(button) {
+    let potentialName = button.closest(".ct-skills__item");
+    if (potentialName !== null) {
+        potentialName = potentialName.querySelector(".ct-skills__col--skill").innerHTML;
+    } else {
+        potentialName = "custom";
+    }
+    return potentialName;
+}
+
+function getRollTypeFromButton(button) {
+    let potentialRollType = "roll";
+    let potentialRollTypeDiv = button.closest(".ct-subsection--skills");
+    if (potentialRollTypeDiv !== null) {
+        potentialRollType = "check";
+    }
+    return potentialRollType;
+}
+
 function checkForOpenGameLog() {
     let gameLog = document.querySelector("[class*='GameLogEntries']");
 
@@ -1334,7 +1373,7 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
     }
 
     // let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"> <div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"> <div class="noty_body"> <div class="dice_result "> <div class="dice_result__info"> <div class="dice_result__info__title"><span class="dice_result__info__rolldetail"> </span><span class="dice_result__rolltype rolltype_roll" style="animation: linear party-time-text 1s infinite;">pixel roll</span></div> <div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span></div><span class="dice_result__info__dicenotation" title="AMOUNTDIETYPE">DICENOTATIONSTR</span> </div> <div class="dice_result__total-container"><span class="dice_result__total-result dice_result__total-result-">VALUE</span></div> </span> </div> </div> <div class="noty_progressbar"></div> </div> </div>'
-    let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"><div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"><div class="noty_body"><div class="dice_result CRITICAL"><div class="dice_result__info"><div class="dice_result__info__title"><span class="dice_result__info__rolldetail">custom: </span><span class="dice_result__rolltype rolltype_roll">roll</span></div><div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span><span class="dice_result__info__breakdown" title="VALUE">VALUE</span></div><span class="dice_result__info__dicenotation" title="DICENOTATIONSTR">DICENOTATIONSTR</span></div><span class="dice_result__divider dice_result__divider--"></span><div class="dice_result__total-container">ROLLTYPE<span class="dice_result__total-result dice_result__total-result-">TOTAL</span></div></div></div><div class="noty_progressbar"></div></div></div>';
+    let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"><div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"><div class="noty_body"><div class="dice_result CRITICAL"><div class="dice_result__info"><div class="dice_result__info__title"><span class="dice_result__info__rolldetail">custom: </span><span class="dice_result__rolltype rolltype_ROLLTYPE">ROLLTYPE</span></div><div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span><span class="dice_result__info__breakdown" title="VALUE">VALUE</span></div><span class="dice_result__info__dicenotation" title="DICENOTATIONSTR">DICENOTATIONSTR</span></div><span class="dice_result__divider dice_result__divider--"></span><div class="dice_result__total-container">ROLLKIND<span class="dice_result__total-result dice_result__total-result-">TOTAL</span></div></div></div><div class="noty_progressbar"></div></div></div>';
     innerDiv = innerDiv.replace("UUID", generateDnDBeyondId());
     innerDiv = innerDiv.replaceAll("DIETYPE", dieType);
     innerDiv = innerDiv.replaceAll("DICENOTATIONSTR", diceNotationStr);
@@ -1354,6 +1393,16 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
             }
             fullValue = fullValue.slice(0, -1);
         }
+    }
+
+    if (currentlyExpectedRoll.rollType !== undefined && currentlyExpectedRoll.rollType !== "custom") {
+        innerDiv = innerDiv.replaceAll("custom", currentlyExpectedRoll.rollName);
+    }
+
+    if (currentlyExpectedRoll.rollName !== undefined && currentlyExpectedRoll.rollName !== "roll") {
+        innerDiv = innerDiv.replaceAll("ROLLTYPE", currentlyExpectedRoll.rollType);
+    } else {
+        innerDiv = innerDiv.replaceAll("ROLLTYPE", "roll");
     }
 
     if (fullValue === "") {
@@ -1376,14 +1425,14 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
     innerDiv = innerDiv.replaceAll("TOTAL", total);
 
     if (currentlyExpectedRoll.advantage) {
-        innerDiv = innerDiv.replaceAll("ROLLTYPE", '<span class="dice_result__total-header dice_result__total-header--advantage">+ADV</span>');
+        innerDiv = innerDiv.replaceAll("ROLLKIND", '<span class="dice_result__total-header dice_result__total-header--advantage">+ADV</span>');
     } else if (currentlyExpectedRoll.disadvantage) {
-        innerDiv = innerDiv.replaceAll("ROLLTYPE", '<span class="dice_result__total-header dice_result__total-header--disadvantage">-DIS</span>');
+        innerDiv = innerDiv.replaceAll("ROLLKIND", '<span class="dice_result__total-header dice_result__total-header--disadvantage">-DIS</span>');
     } else if (currentlyExpectedRoll.critical) {
-        innerDiv = innerDiv.replaceAll("ROLLTYPE", '<span class="dice_result__total-header dice_result__total-header--crit">CRIT</span>');
+        innerDiv = innerDiv.replaceAll("ROLLKIND", '<span class="dice_result__total-header dice_result__total-header--crit">CRIT</span>');
         innerDiv = innerDiv.replaceAll("CRITICAL", "dice_result--crit");
     } else {
-        innerDiv = innerDiv.replaceAll("ROLLTYPE", "");
+        innerDiv = innerDiv.replaceAll("ROLLKIND", "");
     }
 
     div.innerHTML = innerDiv;
@@ -1413,6 +1462,9 @@ window.appendElementToGameLog = function (json) {
     innerDiv = innerDiv.replaceAll("TIME_HUMAN", new Date(json.dateTime).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }).split(",")[0]);
     // date time in this format: 2024-01-08T20:01:30+01:00
     innerDiv = innerDiv.replaceAll("DATETIME", toISOStringWithTimezone(new Date(json.dateTime)));
+
+    innerDiv = innerDiv.replaceAll("custom", json.data.action);
+    innerDiv = innerDiv.replaceAll("roll", json.data.rolls[0].rollType);
 
     element.innerHTML = innerDiv;
 
