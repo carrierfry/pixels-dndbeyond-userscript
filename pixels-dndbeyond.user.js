@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.7
+// @version      0.4.7.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1237,6 +1237,10 @@ function getRollNameFromButton(button) {
         potentialName = button.closest(".ddbc-combat-attack__action").parentElement.children[1].firstChild.firstChild.innerText;
     } else if (button.closest(".ddbc-combat-attack__damage") !== null) {
         potentialName = button.closest(".ddbc-combat-attack__damage").parentElement.children[1].firstChild.firstChild.innerText;
+    } else if (button.closest(".ct-spells-spell__damage") !== null) {
+        potentialName = button.closest(".ct-spells-spell__damage").parentElement.children[1].firstChild.firstChild.innerText;
+    } else if (button.closest(".ct-spells-spell__attacking") !== null) {
+        potentialName = button.closest(".ct-spells-spell__attacking").parentElement.children[1].firstChild.firstChild.innerText;
     } else {
         potentialName = "custom";
     }
@@ -1256,6 +1260,10 @@ function getRollTypeFromButton(button) {
         potentialRollType = "to hit";
     } else if (button.closest(".ddbc-combat-attack__damage") !== null) {
         potentialRollType = "damage";
+    } else if (button.closest(".ct-spells-spell__damage") !== null) {
+        potentialRollType = "damage";
+    } else if (button.closest(".ct-spells-spell__attacking") !== null) {
+        potentialRollType = "to hit";
     }
     return potentialRollType;
 }
