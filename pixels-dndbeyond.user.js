@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.6.4
+// @version      0.4.7
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -501,8 +501,8 @@ function handleMouseLeave(e) {
                 let modifier = getModifierFromButton(elClone);
                 let dieType = getDieTypeFromButton(elClone);
                 let amount = getAmountFromButton(elClone);
-                let rollType = getRollTypeFromButton(lastRightClickedButton);
-                let rollName = getRollNameFromButton(lastRightClickedButton);
+                let rollType = getRollTypeFromButton(elClone);
+                let rollName = getRollNameFromButton(elClone);
 
                 let { adv, dis, crit } = determineRollType(e.currentTarget);
 
@@ -580,8 +580,10 @@ function buildInitialJson(dieType, modifier = 0, amount = 1, rollkind = "", roll
         json.data.rolls[0].rollKind = "critical hit";
     }
     if (rolltype !== "roll") {
-        json.data.action = action;
         json.data.rolls[0].rollType = rolltype;
+    }
+    if (action !== "custom") {
+        json.data.action = action;
     }
     return json;
 }
@@ -697,8 +699,10 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
         }
     }
     if (rolltype !== "roll") {
-        json.data.action = action;
         json.data.rolls[0].rollType = rolltype;
+    }
+    if (action !== "custom") {
+        json.data.action = action;
     }
     return json;
 }
@@ -1223,6 +1227,16 @@ function getRollNameFromButton(button) {
     let potentialName = button.closest(".ct-skills__item");
     if (potentialName !== null) {
         potentialName = potentialName.querySelector(".ct-skills__col--skill").innerHTML;
+    } else if (button.closest(".ct-quick-info__ability") !== null) {
+        potentialName = button.closest(".ct-quick-info__ability").querySelector(".ddbc-ability-summary__abbr").innerText;
+    } else if (button.closest(".ddbc-saving-throws-summary__ability-modifier") !== null) {
+        potentialName = button.closest(".ddbc-saving-throws-summary__ability-modifier").parentElement.children[3].firstChild.innerText;
+    } else if (button.closest(".ct-initiative-box") !== null) {
+        potentialName = "Initiative";
+    } else if (button.closest(".ddbc-combat-attack__action") !== null) {
+        potentialName = button.closest(".ddbc-combat-attack__action").parentElement.children[1].firstChild.firstChild.innerText;
+    } else if (button.closest(".ddbc-combat-attack__damage") !== null) {
+        potentialName = button.closest(".ddbc-combat-attack__damage").parentElement.children[1].firstChild.firstChild.innerText;
     } else {
         potentialName = "custom";
     }
@@ -1234,6 +1248,14 @@ function getRollTypeFromButton(button) {
     let potentialRollTypeDiv = button.closest(".ct-subsection--skills");
     if (potentialRollTypeDiv !== null) {
         potentialRollType = "check";
+    } else if (button.closest(".ct-quick-info__ability") !== null) {
+        potentialRollType = "check";
+    } else if (button.closest(".ddbc-saving-throws-summary__ability-modifier") !== null) {
+        potentialRollType = "save";
+    } else if (button.closest(".ddbc-combat-attack__action") !== null) {
+        potentialRollType = "to hit";
+    } else if (button.closest(".ddbc-combat-attack__damage") !== null) {
+        potentialRollType = "damage";
     }
     return potentialRollType;
 }
@@ -1405,7 +1427,10 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
         innerDiv = innerDiv.replaceAll("custom", currentlyExpectedRoll.rollName);
     }
 
-    if (currentlyExpectedRoll.rollName !== undefined && currentlyExpectedRoll.rollName !== "roll") {
+    if (currentlyExpectedRoll.rollType !== undefined && currentlyExpectedRoll.rollType === "to hit") {
+        innerDiv = innerDiv.replace("ROLLTYPE", "tohit");
+        innerDiv = innerDiv.replace("ROLLTYPE", "to hit");
+    } else if (currentlyExpectedRoll.rollName !== undefined && currentlyExpectedRoll.rollName !== "roll") {
         innerDiv = innerDiv.replaceAll("ROLLTYPE", currentlyExpectedRoll.rollType);
     } else {
         innerDiv = innerDiv.replaceAll("ROLLTYPE", "roll");
