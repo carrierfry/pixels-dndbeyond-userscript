@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.7.1
+// @version      0.4.8
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -893,18 +893,32 @@ async function requestMyPixel() {
         return;
     }
 
-    pixel.addEventListener("roll", (face) => {
-        console.log(`=> rolled face: ${face}`);
+    if (!containsObject(pixel, window.pixels)) {
 
-        // For now only D20, other dice in the future when I have my own dice and can explore the data structures :(
-        if (pixel.dieType === "d6pipped") {
-            rollDice("d6", face);
-        } else {
-            rollDice(pixel.dieType, face);
-        }
-    });
+        pixel.addEventListener("roll", (face) => {
+            console.log(`=> rolled face: ${face}`);
 
-    window.pixels.push(pixel);
+            // For now only D20, other dice in the future when I have my own dice and can explore the data structures :(
+            if (pixel.dieType === "d6pipped") {
+                rollDice("d6", face);
+            } else {
+                rollDice(pixel.dieType, face);
+            }
+        });
+
+        pixel.addEventListener("status", (status) => {
+            console.log(`=> status: ${status}`);
+
+            if (status === "disconnected") {
+                setTimeout(() => {
+                    console.log("Reconnecting...");
+                    repeatConnect(pixel);
+                }, 1000);
+            }
+        });
+
+        window.pixels.push(pixel);
+    }
 
     document.querySelector(".pixels-info-box").style.display = "block";
     updateCurrentPixels();
@@ -1100,7 +1114,12 @@ function displayWhatUserNeedsToDo(text = undefined) {
 }
 
 function updateCurrentPixels() {
-    let amount = window.pixels.length;
+    let amount = 0;
+    for (let i = 0; i < window.pixels.length; i++) {
+        if (window.pixels[i].status !== "disconnected") {
+            amount++;
+        }
+    }
     let text = "You currently have " + amount + " pixel dice connected!";
     if (amount === 0) {
         text = "You currently have no pixel dice connected!";
@@ -1610,4 +1629,15 @@ function reorderGamelog() {
     newChildren.forEach((element) => {
         gameLog.appendChild(element);
     });
+}
+
+function containsObject(obj, list) {
+    var i;
+    for (i = 0; i < list.length; i++) {
+        if (list[i] === obj) {
+            return true;
+        }
+    }
+
+    return false;
 }
