@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.5.1
+// @version      0.5.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1547,7 +1547,7 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
     }
 
     // let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"> <div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"> <div class="noty_body"> <div class="dice_result "> <div class="dice_result__info"> <div class="dice_result__info__title"><span class="dice_result__info__rolldetail"> </span><span class="dice_result__rolltype rolltype_roll" style="animation: linear party-time-text 1s infinite;">pixel roll</span></div> <div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span></div><span class="dice_result__info__dicenotation" title="AMOUNTDIETYPE">DICENOTATIONSTR</span> </div> <div class="dice_result__total-container"><span class="dice_result__total-result dice_result__total-result-">VALUE</span></div> </span> </div> </div> <div class="noty_progressbar"></div> </div> </div>'
-    let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"><div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"><div class="noty_body"><div class="dice_result CRITICAL"><div class="dice_result__info"><div class="dice_result__info__title"><span class="dice_result__info__rolldetail">custom: </span><span class="dice_result__rolltype rolltype_ROLLTYPE">ROLLTYPE</span></div><div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span><span class="dice_result__info__breakdown" title="VALUE">VALUE</span></div><span class="dice_result__info__dicenotation" title="DICENOTATIONSTR">DICENOTATIONSTR</span></div><span class="dice_result__divider dice_result__divider--"></span><div class="dice_result__total-container">ROLLKIND<span class="dice_result__total-result dice_result__total-result-">TOTAL</span></div></div></div><div class="noty_progressbar"></div></div></div>';
+    let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"><div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"><div class="noty_body"><div class="dice_result CRITICAL"><div class="dice_result__info"><div class="dice_result__info__title"><span class="dice_result__info__rolldetail">custom: </span><span class="dice_result__rolltype rolltype_ROLLTYPE">ROLLTYPE</span></div>POTENTIALTARGET<div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span><span class="dice_result__info__breakdown" title="VALUE">VALUE</span></div><span class="dice_result__info__dicenotation" title="DICENOTATIONSTR">DICENOTATIONSTR</span></div><span class="dice_result__divider dice_result__divider--"></span><div class="dice_result__total-container">ROLLKIND<span class="dice_result__total-result dice_result__total-result-">TOTAL</span></div></div></div><div class="noty_progressbar"></div></div></div>';
     innerDiv = innerDiv.replace("UUID", generateDnDBeyondId());
     innerDiv = innerDiv.replaceAll("DIETYPE", dieType);
     innerDiv = innerDiv.replaceAll("DICENOTATIONSTR", diceNotationStr);
@@ -1610,6 +1610,14 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
         innerDiv = innerDiv.replaceAll("CRITICAL", "dice_result--crit");
     } else {
         innerDiv = innerDiv.replaceAll("ROLLKIND", "");
+    }
+
+    if (currentlyExpectedRoll.target !== undefined && currentlyExpectedRoll.target === getUserId() && currentlyExpectedRoll.scope === "userId") {
+        innerDiv = innerDiv.replaceAll("POTENTIALTARGET", '<div class="dice_result__info__title"><span class="dice_result__info__targetdetail">TO: SELF</span></div>');
+    } else if (currentlyExpectedRoll.target !== undefined && currentlyExpectedRoll.target === getGameId() && currentlyExpectedRoll.scope === "gameId") {
+        innerDiv = innerDiv.replaceAll("POTENTIALTARGET", '');
+    } else if (currentlyExpectedRoll.target !== undefined && currentlyExpectedRoll.target === characterData.data.dmId && currentlyExpectedRoll.scope === "userId") {
+        innerDiv = innerDiv.replaceAll("POTENTIALTARGET", '<div class="dice_result__info__title"><span class="dice_result__info__targetdetail">TO: DM</span></div>');
     }
 
     div.innerHTML = innerDiv;

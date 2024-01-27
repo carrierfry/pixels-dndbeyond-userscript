@@ -26,8 +26,11 @@ Brave also works, but only after manually enabling the Bluetooth Web API flag. Y
 2. Install the script by clicking [here](https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js) and clicking on `Install script`. It will update automatically once per day after that.
 3. Open a character sheet in DnD Beyond (make sure to reload the page once it's open if you opened it by clicking on `view` in your campaign or character overview)
 4. Click on the `Connect to Pixels` text at the top right (to the right of the `Subscribe` text) and connect to your Pixel dice
-5. Roll a pixel die
-6. (Optional) Click on the `Pixel Mode` button at the top (to the left of the `Short Rest` button) to enable Pixel Mode. Choose a check/save/damage button and click it. The site will wait for you to roll your Pixel die and then automatically submit the roll to DnD Beyond with it's respective modifier.
+5. Repeat step 4 for every pixel die you want to connect
+
+Once you are connected to your Pixel dice, there are 2 ways to roll with them:
+1. Click on `Pixel Mode`. Now every time you click on a check/save/damage button, it will wait for you to roll your Pixel die and then automatically submit the roll to DnD Beyond.
+2. Right click on a check/save/damage button and click on `Roll with Pixel`. Again the site will wait for you to roll your Pixel die and then automatically submit the roll to DnD Beyond.
 
 ## What is "Pixel Mode"?
 Pixel Mode allows you to choose a check/save/damage and then roll your Pixel die. Instead of rolling a virtual die, the site waits for you to roll your Pixel die and then automatically submits the roll to DnD Beyond.
@@ -36,7 +39,7 @@ You can enable it by clicking on the `Pixel Mode` button at the top beside the `
 If you left click on the `Pixel Mode` button, it will enable Pixel Mode for the next roll.<br>
 If you right click on the `Pixel Mode` button, it will enable Pixel Mode until you disable it again.
 
-Currently, Pixel Mode still has a few bugs when switching to a different tab on the character sheet (e.g. from `ACTIONS` to `SPELLS`), so it's recommended to disable Pixel Mode before switching tabs!
+Pixel Mode is not available when using [Beyond20](https://beyond20.here-for-more.info/) as there are bugs with it.
 
 ## Todos / Things that need to be implemented
 - [x] ~~Support other dice than D20s~~
