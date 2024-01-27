@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.4.8
+// @version      0.5
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -276,6 +276,7 @@ let doubledAmount = false;
 let last2D20Rolls = [];
 let nextDmgRollIsCrit = false;
 let beyond20Installed = false;
+let characterData = {};
 
 // Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
@@ -300,6 +301,7 @@ function main() {
         return;
     }
 
+    getCompleteCharacterData();
     checkIfBeyond20Installed();
 
     let color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
@@ -407,7 +409,7 @@ function addRollWithPixelButton(contextMenu) {
             let rollType = getRollTypeFromButton(lastRightClickedButton);
             let rollName = getRollNameFromButton(lastRightClickedButton);
 
-            let { adv, dis, crit } = determineRollType(e.currentTarget);
+            let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
 
             currentlyExpectedRoll = {
                 "modifier": modifier,
@@ -418,7 +420,9 @@ function addRollWithPixelButton(contextMenu) {
                 "disadvantage": dis,
                 "critical": crit,
                 "rollType": rollType,
-                "rollName": rollName
+                "rollName": rollName,
+                "target": target,
+                "scope": scope
             };
 
         };
@@ -441,7 +445,7 @@ function handleRightClick(e) {
     if (e.button == 2) {
         e.preventDefault();
         e.stopPropagation();
-        console.log("Dice right clicked");
+        // console.log("Dice right clicked");
 
         lastRightClickedButton = e.currentTarget;
     }
@@ -504,7 +508,7 @@ function handleMouseLeave(e) {
                 let rollType = getRollTypeFromButton(elClone);
                 let rollName = getRollNameFromButton(elClone);
 
-                let { adv, dis, crit } = determineRollType(e.currentTarget);
+                let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
 
                 currentlyExpectedRoll = {
                     "modifier": modifier,
@@ -515,7 +519,9 @@ function handleMouseLeave(e) {
                     "disadvantage": dis,
                     "critical": crit,
                     "rollType": rollType,
-                    "rollName": rollName
+                    "rollName": rollName,
+                    "target": target,
+                    "scope": scope
                 };
             };
         });
@@ -540,7 +546,7 @@ function generateDnDBeyondId() {
 // There are two messages that need to be sent to the server to roll a die. The first is the initial message, the second is the rolled message.
 // The initial message is sent with a random rollId, the rolled message is sent with the same rollId as the initial message.
 // These 2 functions build the JSON for those messages.
-function buildInitialJson(dieType, modifier = 0, amount = 1, rollkind = "", rolltype = "roll", action = "custom") {
+function buildInitialJson(dieType, modifier = 0, amount = 1, rollkind = "", rolltype = "roll", action = "custom", target = getGameId(), scope = "gameId") {
     let json = JSON.parse(JSON.stringify(diceMessageInitial));
     json.id = generateDnDBeyondId();
     json.dateTime = Date.now();
@@ -585,10 +591,14 @@ function buildInitialJson(dieType, modifier = 0, amount = 1, rollkind = "", roll
     if (action !== "custom") {
         json.data.action = action;
     }
+    json.data.context.messageTarget = "" + target;
+    json.data.context.messageScope = scope;
+    json.messageTarget = "" + target;
+    json.messageScope = scope;
     return json;
 }
 
-function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, rollkind = "", rolltype = "roll", action = "custom") {
+function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, rollkind = "", rolltype = "roll", action = "custom", target = getGameId(), scope = "gameId") {
     let json = JSON.parse(JSON.stringify(diceMessageRolled));
     json.id = generateDnDBeyondId();
     json.dateTime = Date.now();
@@ -704,6 +714,10 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
     if (action !== "custom") {
         json.data.action = action;
     }
+    json.data.context.messageTarget = "" + target;
+    json.data.context.messageScope = scope;
+    json.messageTarget = "" + target;
+    json.messageScope = scope;
     return json;
 }
 
@@ -764,6 +778,28 @@ function getAvatarUrl() {
     return avatar;
 }
 
+function getCompleteCharacterData() {
+    let characterId = getCharacterId();
+    // https://character-service.dndbeyond.com/character/v5/character/89705162?includeCustomItems=true
+    let url = "https://character-service.dndbeyond.com/character/v5/character/" + characterId + "?includeCustomItems=true";
+
+    // fetch the URL and put the json into the characterData variable
+    fetch(url, {
+        "headers": {
+            "accept": "application/json, text/plain, */*",
+            "accept-language": "de-DE,de;q=0.9,en-DE;q=0.8,en;q=0.7,en-US;q=0.6",
+        },
+        "referrer": "https://www.dndbeyond.com/",
+        "referrerPolicy": "strict-origin-when-cross-origin",
+        "body": null,
+        "method": "GET",
+        "mode": "cors",
+        "credentials": "include"
+    }).then(response => response.json()).then(data => {
+        characterData = data;
+    });
+}
+
 // "Rolls" a die. You can specify the dice type and value and it will send the appropriate messages to the server.
 function rollDice(dieType, value) {
     let modifier = 0;
@@ -817,7 +853,7 @@ function rollDice(dieType, value) {
     if (multiRollComplete || Object.keys(currentlyExpectedRoll).length === 0 || currentlyExpectedRoll.amount === 1) {
         let initJson;
         if (Object.keys(currentlyExpectedRoll).length > 0) {
-            initJson = buildInitialJson(dieType, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName);
+            initJson = buildInitialJson(dieType, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName, currentlyExpectedRoll.target, currentlyExpectedRoll.scope);
         } else {
             initJson = buildInitialJson(dieType, modifier, amount);
         }
@@ -827,13 +863,13 @@ function rollDice(dieType, value) {
 
         let rolledJson;
         if (Object.keys(currentlyExpectedRoll).length > 0) {
-            rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName);
+            rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName, currentlyExpectedRoll.target, currentlyExpectedRoll.scope);
         } else {
             rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount);
         }
 
         setTimeout(() => {
-            console.log("sending value: " + dieValue);
+            // console.log("sending value: " + dieValue);
             socket.send(JSON.stringify(rolledJson));
         }, 1000);
 
@@ -871,6 +907,9 @@ function rollDice(dieType, value) {
         document.querySelector("#advButton").style.backgroundColor = "darkgray";
         document.querySelector("#critButton").style.backgroundColor = "darkgray";
         document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+        document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
+        document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+        document.querySelector("#dmButton").style.backgroundColor = "darkgray";
     } else {
         console.log("waiting for more rolls");
     }
@@ -967,7 +1006,7 @@ function addPixelModeButton() {
                         let rollType = getRollTypeFromButton(elClone);
                         let rollName = getRollNameFromButton(elClone);
 
-                        let { adv, dis, crit } = determineRollType(e.currentTarget);
+                        let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
 
                         currentlyExpectedRoll = {
                             "modifier": modifier,
@@ -978,7 +1017,9 @@ function addPixelModeButton() {
                             "disadvantage": dis,
                             "critical": crit,
                             "rollType": rollType,
-                            "rollName": rollName
+                            "rollName": rollName,
+                            "target": target,
+                            "scope": scope
                         };
                     };
                 });
@@ -999,7 +1040,7 @@ function addPixelModeButton() {
 
     div.addEventListener('mouseover', function (e) {
         e.preventDefault();
-        console.log("Pixels button hovered");
+        // console.log("Pixels button hovered");
 
         if (!tootltipShown) {
 
@@ -1017,7 +1058,7 @@ function addPixelModeButton() {
 
     div.addEventListener('mouseout', function (e) {
         e.preventDefault();
-        console.log("Pixels button unhovered");
+        // console.log("Pixels button unhovered");
 
         if (tootltipShown) {
             document.querySelector(".tippy-popper--pixel-mode").remove();
@@ -1034,26 +1075,36 @@ function addPixelsInfoBox() {
     let div = document.createElement("div");
     div.className = "pixels-info-box";
 
-    div.innerHTML = '<div class="pixels-info-box__content"> <div class="pixels-info-box__content__title">Pixel Info</div> <div class="pixels-info-box__content__text"> <p id="pixel-amount" class="no-pixel-warning">You currently have no pixel dice connected!</p> <p class="todo_text">You currently have nothing to do!</p> </div> <div class="pixels-info-box__content__buttons"> <button id="advButton">Adv.</button> <button id="critButton">Crit</button> <button id="disadvButton">Disadv.</button> </div> </div>';
+    div.innerHTML = '<div class="pixels-info-box__content"> <div class="pixels-info-box__content__title">Pixel Info</div> <div class="pixels-info-box__content__text"> <p id="pixel-amount" class="no-pixel-warning">You currently have no pixel dice connected!</p> <p class="todo_text">You currently have nothing to do!</p> </div> <div class="pixels-info-box__content__buttons_target"> <button id="everyoneButton">Everyone</button> <button id="selfButton">Self</button> <button id="dmButton">DM</button> </div> <div class="pixels-info-box__content__buttons"> <button id="advButton">Adv.</button> <button id="critButton">Crit</button> <button id="disadvButton">Disadv.</button> </div> </div>';
     document.querySelector("body").appendChild(div);
 
     // add style to the info box (it should be on the left side of the page and be closed by default)
     // it should expand to the right when opened and be roughly 300px wide
 
-    GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 200px; background-color: rgba(0,0,0,0.90); z-index: 999`);
+    GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
     GM_addStyle(`.pixels-info-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
     GM_addStyle(`.pixels-info-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
     GM_addStyle(`.pixels-info-box__content__text { position: absolute; top: 10%; left: 0%; width: 100%; height: 80%; font-size: 1em; text-align: center; color: white; overflow-y:auto; }`);
     GM_addStyle(`.pixels-info-box__content__buttons { position: absolute; top: 90%; left: 0%; width: 100%; height: 10%; }`);
-    GM_addStyle(`.pixels-info-box__content__buttons button { width: 30%; height: 100%; margin-left: 1%; background-color: darkgray; border: 2px solid; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons_target { position: absolute; top: 75%; left: 0%; width: 100%; height: 10%; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons button, .pixels-info-box__content__buttons_target button { width: 30%; height: 100%; margin-left: 1%; background-color: darkgray; border: 2px solid; }`);
     GM_addStyle(`.pixels-info-box__content__buttons #advButton { border-color: lime; }`);
     GM_addStyle(`.pixels-info-box__content__buttons #critButton { border-color: yellow; }`);
     GM_addStyle(`.pixels-info-box__content__buttons #disadvButton { border-color: red; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons_target #everyoneButton { border-color: white; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons_target #selfButton { border-color: white; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons_target #dmButton { border-color: white; }`);
     GM_addStyle(`.no-pixel-warning { color: yellow; }`);
 
     document.querySelectorAll(".pixels-info-box__content__buttons button").forEach((element) => {
         element.onclick = (e) => {
             setRollType(element.id);
+        };
+    });
+
+    document.querySelectorAll(".pixels-info-box__content__buttons_target button").forEach((element) => {
+        element.onclick = (e) => {
+            setRollTarget(element.id);
         };
     });
 
@@ -1066,7 +1117,7 @@ function addPixelsInfoBox() {
     button.innerHTML = '<img src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/img/colorful.png" width="32px" height="32px">';
     button.onclick = (e) => {
         e.preventDefault();
-        console.log("Pixels info box button clicked");
+        // console.log("Pixels info box button clicked");
 
         if (div.style.display === "none") {
             div.style.display = "block";
@@ -1370,10 +1421,36 @@ function setRollType(type) {
     }
 }
 
+function setRollTarget(type) {
+    if (Object.keys(currentlyExpectedRoll).length !== 0) {
+        if (type === "everyoneButton") {
+            currentlyExpectedRoll.target = getGameId();
+            currentlyExpectedRoll.scope = "gameId";
+            document.querySelector("#everyoneButton").style.backgroundColor = "white";
+            document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+            document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+        } else if (type === "selfButton") {
+            currentlyExpectedRoll.target = getUserId();
+            currentlyExpectedRoll.scope = "userId";
+            document.querySelector("#selfButton").style.backgroundColor = "white";
+            document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
+            document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+        } else if (type === "dmButton") {
+            currentlyExpectedRoll.target = characterData.data.campaign.dmUserId;
+            currentlyExpectedRoll.scope = "userId";
+            document.querySelector("#dmButton").style.backgroundColor = "white";
+            document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+            document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
+        }
+    }
+}
+
 function determineRollType(rollButton) {
     let adv = false;
     let dis = false;
     let crit = false;
+    let target = getGameId();
+    let scope = "gameId";
 
     if (!pixelMode) {
 
@@ -1399,12 +1476,29 @@ function determineRollType(rollButton) {
                 }
             };
         }
-        // if (nextDmgRollIsCrit) {
-        //     crit = true;
-        //     nextDmgRollIsCrit = false;
-        // }
+
+        list = rollButton.previousSibling.previousSibling.children[1].firstChild; // ul
+        if (list !== null) {
+            let children = list.children;
+            //children.forEach((element) => {
+            for (let i = 0; i < children.length; i++) {
+                let element = children[i];
+                if (element.children[2] !== undefined) {
+                    if (element.children[1].innerHTML.includes("Every")) {
+                        target = getGameId();
+                        scope = "gameId";
+                    } else if (element.children[1].innerHTML.includes("Self")) {
+                        target = getUserId();
+                        scope = "userId";
+                    } else if (element.children[1].innerHTML.includes("Master")) {
+                        target = characterData.data.campaign.dmUserId;
+                        scope = "userId";
+                    }
+                }
+            };
+        }
     }
-    return { adv, dis, crit };
+    return { adv, dis, crit, target, scope };
 }
 
 function getRollKind() {
