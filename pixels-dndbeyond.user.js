@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.5
+// @version      0.5.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -779,24 +779,49 @@ function getAvatarUrl() {
 }
 
 function getCompleteCharacterData() {
-    let characterId = getCharacterId();
-    // https://character-service.dndbeyond.com/character/v5/character/89705162?includeCustomItems=true
-    let url = "https://character-service.dndbeyond.com/character/v5/character/" + characterId + "?includeCustomItems=true";
+    let campaignId = getGameId();
+    let url = "https://www.dndbeyond.com/api/campaign/stt/active-campaigns/" + campaignId;
 
-    // fetch the URL and put the json into the characterData variable
-    fetch(url, {
+    fetch("https://auth-service.dndbeyond.com/v1/cobalt-token", {
         "headers": {
-            "accept": "application/json, text/plain, */*",
+            "accept": "*/*",
             "accept-language": "de-DE,de;q=0.9,en-DE;q=0.8,en;q=0.7,en-US;q=0.6",
+            "sec-ch-ua": "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-site"
         },
         "referrer": "https://www.dndbeyond.com/",
         "referrerPolicy": "strict-origin-when-cross-origin",
         "body": null,
-        "method": "GET",
+        "method": "POST",
         "mode": "cors",
         "credentials": "include"
-    }).then(response => response.json()).then(data => {
-        characterData = data;
+    }).then(response => response.json()).then(data1 => {
+        // fetch the URL and put the json into the characterData variable
+        fetch(url, {
+            "headers": {
+                "accept": "*/*",
+                "accept-language": "de-DE,de;q=0.9,en-DE;q=0.8,en;q=0.7,en-US;q=0.6",
+                "authorization": "Bearer " + data1.token,
+                "sec-ch-ua": "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\"",
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": "\"Windows\"",
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-origin"
+            },
+            "referrer": "https://www.dndbeyond.com/characters/" + getCharacterId(),
+            "referrerPolicy": "strict-origin-when-cross-origin",
+            "body": null,
+            "method": "GET",
+            "mode": "cors",
+            "credentials": "include"
+        }).then(response => response.json()).then(data => {
+            characterData = data;
+        });
     });
 }
 
@@ -1436,7 +1461,7 @@ function setRollTarget(type) {
             document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
             document.querySelector("#dmButton").style.backgroundColor = "darkgray";
         } else if (type === "dmButton") {
-            currentlyExpectedRoll.target = characterData.data.campaign.dmUserId;
+            currentlyExpectedRoll.target = characterData.data.dmId;
             currentlyExpectedRoll.scope = "userId";
             document.querySelector("#dmButton").style.backgroundColor = "white";
             document.querySelector("#selfButton").style.backgroundColor = "darkgray";
@@ -1491,7 +1516,7 @@ function determineRollType(rollButton) {
                         target = getUserId();
                         scope = "userId";
                     } else if (element.children[1].innerHTML.includes("Master")) {
-                        target = characterData.data.campaign.dmUserId;
+                        target = characterData.data.dmId;
                         scope = "userId";
                     }
                 }
