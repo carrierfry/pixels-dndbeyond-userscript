@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.5.2.2
+// @version      0.5.2.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1339,6 +1339,12 @@ function getRollNameFromButton(button) {
     } else {
         potentialName = "custom";
     }
+
+    //check if last character is a *
+    if (potentialName[potentialName.length - 1] === "*") {
+        potentialName = potentialName.substring(0, potentialName.length - 1);
+    }
+
     return potentialName;
 }
 
@@ -1613,11 +1619,11 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
     }
 
     if (currentlyExpectedRoll.target !== undefined && currentlyExpectedRoll.target === getUserId() && currentlyExpectedRoll.scope === "userId") {
-        innerDiv = innerDiv.replaceAll("POTENTIALTARGET", '<div class="dice_result__info__title">\n                                <span class="dice_result__info__targetdetail">TO: SELF\n                               </span></div>');
+        innerDiv = innerDiv.replaceAll("POTENTIALTARGET", '<div class="dice_result__info__title">\n                                <span class="dice_result__info__targetdetail">TO: SELF\n                               </span>\n                            </div>');
     } else if (currentlyExpectedRoll.target !== undefined && currentlyExpectedRoll.target === getGameId() && currentlyExpectedRoll.scope === "gameId") {
         innerDiv = innerDiv.replaceAll("POTENTIALTARGET", '');
     } else if (currentlyExpectedRoll.target !== undefined && currentlyExpectedRoll.target === characterData.data.dmId && currentlyExpectedRoll.scope === "userId") {
-        innerDiv = innerDiv.replaceAll("POTENTIALTARGET", '<div class="dice_result__info__title">\n                                <span class="dice_result__info__targetdetail">TO: DM\n                               </span></div>');
+        innerDiv = innerDiv.replaceAll("POTENTIALTARGET", '<div class="dice_result__info__title">\n                                <span class="dice_result__info__targetdetail">TO: DM\n                               </span>\n                            </div>');
     }
 
     div.innerHTML = innerDiv;
