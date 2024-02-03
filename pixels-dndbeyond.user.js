@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.5.2.4
+// @version      0.5.2.5
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1624,6 +1624,8 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
         innerDiv = innerDiv.replaceAll("POTENTIALTARGET", '');
     } else if (currentlyExpectedRoll.target !== undefined && currentlyExpectedRoll.target === characterData.data.dmId && currentlyExpectedRoll.scope === "userId") {
         innerDiv = innerDiv.replaceAll("POTENTIALTARGET", '\n                        <div class="dice_result__info__title">\n                                <span class="dice_result__info__targetdetail">TO: DM\n                               </span>\n                            </div>\n                        ');
+    } else {
+        innerDiv = innerDiv.replaceAll("POTENTIALTARGET", '');
     }
 
     div.innerHTML = innerDiv;
