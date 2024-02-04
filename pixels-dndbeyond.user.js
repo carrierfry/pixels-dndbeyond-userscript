@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.5.2.5
+// @version      0.5.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -301,23 +301,33 @@ function main() {
         return;
     }
 
-    getCompleteCharacterData();
-    checkIfBeyond20Installed();
+    navigator.bluetooth.getAvailability().then(isBluetoothAvailable => {
+        if (isBluetoothAvailable) {
+            getCompleteCharacterData();
+            checkIfBeyond20Installed();
 
-    let color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
+            let color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
 
-    GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color:  ${color} !important; }`);
-    GM_addStyle(`.ct-character-header-desktop__group--pixels-not-available { cursor: default !important; background-color: darkgray !important; border-color: darkgray !important; }`);
-    GM_addStyle(`#red-pixel-icon { filter: brightness(30%) sepia(1) saturate(25); }`);
-    addPixelsLogoButton();
-    addPixelModeButton();
-    addPixelsInfoBox();
-    setInterval(checkForOpenGameLog, 500);
-    setInterval(checkForMissingPixelButtons, 1000);
-    setInterval(checkForContextMenu, 300);
-    setInterval(checkForTodo, 300);
-    setInterval(listenForRightClicks, 300);
-    setInterval(listenForMouseOverOfNavItems, 300);
+            GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color:  ${color} !important; }`);
+            GM_addStyle(`.ct-character-header-desktop__group--pixels-not-available { cursor: default !important; background-color: darkgray !important; border-color: darkgray !important; }`);
+            GM_addStyle(`#red-pixel-icon { filter: brightness(30%) sepia(1) saturate(25); }`);
+            addPixelsLogoButton();
+            addPixelModeButton();
+            addPixelsInfoBox();
+            setInterval(checkForOpenGameLog, 500);
+            setInterval(checkForMissingPixelButtons, 1000);
+            setInterval(checkForContextMenu, 300);
+            setInterval(checkForTodo, 300);
+            setInterval(listenForRightClicks, 300);
+            setInterval(listenForMouseOverOfNavItems, 300);
+        } else {
+            if (navigator.brave !== undefined && navigator.brave.isBrave()) {
+                alert("Please enable Web Bluetooth by opening the following URL:              brave://flags/#brave-web-bluetooth-api");
+            } else {
+                alert("Your browser does not support Web Bluetooth. Please use a browser that supports Web Bluetooth.");
+            }
+        }
+    });
 }
 
 function checkIfBeyond20Installed() {
@@ -1139,7 +1149,7 @@ function addPixelsInfoBox() {
     // add a button that opens and closes the box
     let button = document.createElement("button");
     button.className = "pixels-info-box__button";
-    button.innerHTML = '<img src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/img/colorful.png" width="32px" height="32px">';
+    button.innerHTML = '<img src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/chrome_extension/img/colorful_128x128.png" width="32px" height="32px">';
     button.onclick = (e) => {
         e.preventDefault();
         // console.log("Pixels info box button clicked");
@@ -1154,31 +1164,6 @@ function addPixelsInfoBox() {
 
     // add style to the button
     GM_addStyle(`.pixels-info-box__button { position: fixed; top: 18px; left: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
-}
-
-function displayDieRoll(dieType, value, modifier = 0) {
-    let div = document.createElement("div");
-    div.id = generateDnDBeyondId();
-
-    let innerDiv = '<div id="roll_list_entry_UUID" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"> <div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"> <div class="noty_body"> <div class="dice_result "> <div class="dice_result__info"> <div class="dice_result__info__title"><span class="dice_result__info__rolldetail"> </span><span class="dice_result__rolltype rolltype_roll" style="animation: linear party-time-text 1s infinite;">pixel roll</span></div> <div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span></div><span class="dice_result__info__dicenotation" title="1DIETYPE">1DIETYPE</span> </div> <div class="dice_result__total-container"><span class="dice_result__total-result dice_result__total-result-">VALUE</span></div> </span> </div> </div> <div class="noty_progressbar"></div> </div> </div>'
-    innerDiv = innerDiv.replace("UUID", generateDnDBeyondId());
-    innerDiv = innerDiv.replaceAll("DIETYPE", dieType);
-    if (modifier !== 0) {
-        if (modifier > 0) {
-            innerDiv = innerDiv.replaceAll("VALUE", value + " + " + modifier + " = " + (value + modifier));
-        } else {
-            innerDiv = innerDiv.replaceAll("VALUE", value + appendSpacesToSignOfNegativeNumbers(modifier) + " = " + (value + modifier));
-        }
-    }
-    innerDiv = innerDiv.replaceAll("VALUE", value);
-
-    div.innerHTML = innerDiv;
-    document.querySelector(".pixels-info-box__content__text").appendChild(div);
-
-    //add styles
-    GM_addStyle(`.dice-icon-die--DIETYPE { background-image: url("https://gamewithpixels.com/dice/DIETYPE.png"); }`);
-    let id = "#" + div.firstChild.id;
-    GM_addStyle(`${id} { margin-top: 5px; }`);
 }
 
 function displayWhatUserNeedsToDo(text = undefined) {
