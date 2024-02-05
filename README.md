@@ -21,16 +21,22 @@ Brave also works, but only after manually enabling the Bluetooth Web API flag. Y
 
 ⚠️⚠️⚠️ **Safari, Firefox and Opera are not supported** yet, as they either don't support the Bluetooth Web API yet or disabled it on purpose! ⚠️⚠️⚠️
 
-## How to use
+## Download
+You can now install the integration from the Chrome Web Store by clicking [here](https://chromewebstore.google.com/detail/pixels-dndbeyond-integrat/dldknofeibljjommedjjegffjlemgack)! This is the easiest way to install the integration, as you don't have to do anything special. The Chrome Web Store version will receive updates less frequently than the userscript version, but it is also more stable.
+
+Alternatively, you can install the userscript by following the instructions below.
 1. Install [Tampermonkey](https://www.tampermonkey.net/) into your browser (make sure to use this link, as some browsers block Tampermonkey if it get's added via the chrome web store. When you follow this link, you get a button to install Tampermonkey from the respective browser's web store)
 2. Install the script by clicking [here](https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js) and clicking on `Install script`. It will update automatically once per day after that.
-3. Open a character sheet in DnD Beyond (make sure to reload the page once it's open if you opened it by clicking on `view` in your campaign or character overview)
-4. Click on the `Connect to Pixels` text at the top right (to the right of the `Subscribe` text) and connect to your Pixel dice
-5. Repeat step 4 for every pixel die you want to connect
+
+## How to use
+
+1. Open a character sheet in DnD Beyond (make sure to reload the page once it's open if you opened it by clicking on `view` in your campaign or character overview)
+2. Click on the `Connect to Pixels` text at the top right (to the right of the `Subscribe` text) and connect to your Pixel dice
+3. Repeat step 4 for every pixel die you want to connect
 
 Once you are connected to your Pixel dice, there are 2 ways to roll with them:
 1. Click on `Pixel Mode`. Now every time you click on a check/save/damage button, it will wait for you to roll your Pixel die and then automatically submit the roll to DnD Beyond.
-2. Right click on a check/save/damage button and click on `Roll with Pixel`. Again the site will wait for you to roll your Pixel die and then automatically submit the roll to DnD Beyond.
+2. Right click on a check/save/damage button and click on `Roll with Pixels`. Again the site will wait for you to roll your Pixel die and then automatically submit the roll to DnD Beyond.
 
 ## What is "Pixel Mode"?
 Pixel Mode allows you to choose a check/save/damage and then roll your Pixel die. Instead of rolling a virtual die, the site waits for you to roll your Pixel die and then automatically submits the roll to DnD Beyond.
