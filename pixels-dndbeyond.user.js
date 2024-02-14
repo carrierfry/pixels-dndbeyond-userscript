@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.5.3.1
+// @version      0.6
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -13,7 +13,7 @@
 // @require      https://unpkg.com/@systemic-games/pixels-web-connect@1.1.1/dist/umd/index.js
 // ==/UserScript==
 
-const { repeatConnect, requestPixel } = pixelsWebConnect;
+const { repeatConnect, requestPixel, Color } = pixelsWebConnect;
 
 const diceTypes = {
     "d4": {
@@ -444,6 +444,13 @@ function addRollWithPixelButton(contextMenu) {
                 "scope": scope
             };
 
+            if (window.pixels !== undefined && pixels.length > 0) {
+                for (let i = 0; i < pixels.length; i++) {
+                    if (pixels[i].dieType === dieType) {
+                        lightUpPixel(pixels[i], "waitingForRoll");
+                    }
+                }
+            }
         };
 
         contextMenu.firstChild.appendChild(button);
@@ -542,6 +549,14 @@ function handleMouseLeave(e) {
                     "target": target,
                     "scope": scope
                 };
+
+                if (window.pixels !== undefined && pixels.length > 0) {
+                    for (let i = 0; i < pixels.length; i++) {
+                        if (pixels[i].dieType === dieType) {
+                            lightUpPixel(pixels[i], "waitingForRoll");
+                        }
+                    }
+                }
             };
         });
     }
@@ -1001,10 +1016,21 @@ async function requestMyPixel() {
         });
 
         window.pixels.push(pixel);
+        lightUpPixel(pixel, "connected");
     }
 
     document.querySelector(".pixels-info-box").style.display = "block";
     updateCurrentPixels();
+}
+
+async function lightUpPixel(pixel, reason = undefined) {
+    if (reason === "waitingForRoll") {
+        await pixel.blink(Color.yellow, { count: 3, duration: 3000, fade: 0.3 });
+    } else if (reason === "connected") {
+        await pixel.blink(Color.green, { count: 5, duration: 1000, fade: 0 });
+    } else {
+        await pixel.blink(Color.brightCyan);
+    }
 }
 
 function addPixelModeButton() {
@@ -1065,6 +1091,14 @@ function addPixelModeButton() {
                             "target": target,
                             "scope": scope
                         };
+
+                        if (window.pixels !== undefined && pixels.length > 0) {
+                            for (let i = 0; i < pixels.length; i++) {
+                                if (pixels[i].dieType === dieType) {
+                                    lightUpPixel(pixels[i], "waitingForRoll");
+                                }
+                            }
+                        }
                     };
                 });
             } else {
