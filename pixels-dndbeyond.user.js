@@ -285,6 +285,7 @@ let last2D20Rolls = [];
 let nextDmgRollIsCrit = false;
 let beyond20Installed = false;
 let characterData = {};
+let gameLogEntries = [];
 
 // Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
@@ -1393,6 +1394,7 @@ function checkForOpenGameLog() {
             }
             currentlyUpdatingGameLog = false;
         }
+        // reorderGamelog();
     } else {
         gameLogOpen = false;
         rolledJsonArrayIndex = 0;
@@ -1656,6 +1658,9 @@ window.appendElementToGameLog = function (json) {
 
     element.innerHTML = innerDiv;
 
+    //add .pixels-added-entry to the class list
+    element.classList.add("pixels-added-entry");
+
     gameLog.prepend(element);
 }
 
@@ -1740,26 +1745,34 @@ function displayTooltip(tooltipText, x, y) {
 function reorderGamelog() {
     let gameLog = document.querySelector("[class*='GameLogEntries']");
     let children = gameLog.children;
-    let newChildren = [];
-    for (let i = children.length - 1; i >= 0; i--) {
-        newChildren.push(children[i]);
-    }
-    newChildren.sort((a, b) => {
-        if (a.lastChild.children.length === 0) {
-            return 1;
-        } else if (b.lastChild.children.length === 0) {
-            return 1;
-        }
-        let datetimeA = new Date(a.lastChild.children[a.lastChild.children.length - 1].getAttribute("datetime"));
-        let datetimeB = new Date(b.lastChild.children[a.lastChild.children.length - 1].getAttribute("datetime"));
-        return datetimeB - datetimeA;
-    });
 
-    gameLog.innerHTML = "";
-    newChildren.forEach((element) => {
-        gameLog.appendChild(element);
-    });
+    if (gameLogEntries.length === 0) {
+        gameLogEntries = children;
+    }
+
+    // check if gameLogEntries is different from children
+    if (gameLogEntries.length !== children.length) {
+        // check if first child has class pixels-added-entry
+        let firstChild = children[0];
+        if (firstChild.classList.contains("pixels-added-entry")) {
+            // swap first and second child
+            swap(firstChild, children[1]);
+        }
+
+        gameLogEntries = children;
+    }
 }
+
+function swap(nodeA, nodeB) {
+    const parentA = nodeA.parentNode;
+    const siblingA = nodeA.nextSibling === nodeB ? nodeA : nodeA.nextSibling;
+
+    // Move `nodeA` to before the `nodeB`
+    nodeB.parentNode.insertBefore(nodeA, nodeB);
+
+    // Move `nodeB` to before the sibling of `nodeA`
+    parentA.insertBefore(nodeB, siblingA);
+};
 
 function containsObject(obj, list) {
     var i;
