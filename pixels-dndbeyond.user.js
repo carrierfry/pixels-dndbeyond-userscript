@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.6
+// @version      0.6.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -286,6 +286,7 @@ let nextDmgRollIsCrit = false;
 let beyond20Installed = false;
 let characterData = {};
 let gameLogEntries = [];
+let lastHealth = -1;
 
 // Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
@@ -329,6 +330,7 @@ function main() {
             setInterval(checkForTodo, 300);
             setInterval(listenForRightClicks, 300);
             setInterval(listenForMouseOverOfNavItems, 300);
+            setInterval(checkForHealthChange, 300);
         } else {
             if (navigator.brave !== undefined && navigator.brave.isBrave()) {
                 alert("Please enable Web Bluetooth by opening the following URL:              brave://flags/#brave-web-bluetooth-api");
@@ -403,6 +405,29 @@ function checkForTodo() {
         displayWhatUserNeedsToDo(text);
     } else {
         displayWhatUserNeedsToDo();
+    }
+}
+
+function checkForHealthChange() {
+    let element = document.querySelector('div[aria-labelledby="ct-health-summary-current-label ct-health-summary-label"]');
+    if (element !== null) {
+        let currentHealth = parseInt(element.innerText);
+
+        if (lastHealth === -1) {
+            lastHealth = currentHealth;
+        }
+
+        if (currentHealth < lastHealth) {
+            lightUpAllPixels("damage");
+        } else if (currentHealth > lastHealth) {
+            lightUpAllPixels("heal");
+        }
+
+        lastHealth = currentHealth;
+    } else if (document.querySelector(".ct-health-summary__deathsaves-icon") !== null && lastHealth > 0) {
+        lightUpAllPixels("damage");
+
+        lastHealth = 0;
     }
 }
 
@@ -1025,11 +1050,23 @@ async function requestMyPixel() {
 
 async function lightUpPixel(pixel, reason = undefined) {
     if (reason === "waitingForRoll") {
-        await pixel.blink(Color.yellow, { count: 3, duration: 3000, fade: 0.3 });
+        await pixel.blink(Color.dimYellow, { count: 3, duration: 3000, fade: 0.3 });
     } else if (reason === "connected") {
-        await pixel.blink(Color.green, { count: 5, duration: 1000, fade: 0 });
+        await pixel.blink(Color.dimGreen, { count: 1, duration: 1500, fade: 0.8 });
+    } else if (reason === "damage") {
+        await pixel.blink(Color.dimRed, { count: 2, duration: 3000, fade: 1 });
+    } else if (reason === "heal") {
+        await pixel.blink(Color.dimGreen, { count: 2, duration: 3000, fade: 1 });
     } else {
         await pixel.blink(Color.brightCyan);
+    }
+}
+
+async function lightUpAllPixels(reason = undefined) {
+    if (window.pixels !== undefined) {
+        for (let i = 0; i < pixels.length; i++) {
+            await lightUpPixel(pixels[i], reason);
+        }
     }
 }
 
