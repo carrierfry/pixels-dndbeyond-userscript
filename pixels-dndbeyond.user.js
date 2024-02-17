@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.6.1
+// @version      0.6.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -287,6 +287,27 @@ let beyond20Installed = false;
 let characterData = {};
 let gameLogEntries = [];
 let lastHealth = -1;
+let currentlyObserving = false;
+
+const callback = (mutationList, observer) => {
+    for (const mutation of mutationList) {
+        for (const addedNode of mutation.addedNodes) {
+            if (addedNode.classList !== undefined && !addedNode.classList.contains("pixels-added-entry") && !addedNode.classList.contains("reordered-entry")) {
+                // move element to first position of game log
+                let gameLog = document.querySelector("[class*='GameLogEntries']");
+                if (gameLog !== null) {
+                    setTimeout(() => {
+                        addedNode.classList.add("reordered-entry");
+                        gameLog.prepend(addedNode);
+                        console.log("Reordered entry");
+                    }, 100);
+                }
+            }
+        }
+    }
+};
+
+const observer = new MutationObserver(callback);
 
 // Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
@@ -1435,9 +1456,16 @@ function getRollTypeFromButton(button) {
 }
 
 function checkForOpenGameLog() {
+    const config = { attributes: false, childList: true, subtree: false };
     let gameLog = document.querySelector("[class*='GameLogEntries']");
 
     if (gameLog !== null) {
+
+        if (!currentlyObserving) {
+            currentlyObserving = true;
+            observer.observe(gameLog, config);
+        }
+
         if (!currentlyUpdatingGameLog) {
             currentlyUpdatingGameLog = true;
             if (gameLogOpen) {
@@ -1469,6 +1497,11 @@ function checkForOpenGameLog() {
     } else {
         gameLogOpen = false;
         rolledJsonArrayIndex = 0;
+
+        if (currentlyObserving) {
+            currentlyObserving = false;
+            observer.disconnect();
+        }
     }
 }
 
