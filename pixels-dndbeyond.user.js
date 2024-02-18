@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.6.2
+// @version      0.6.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -316,7 +316,7 @@ window.WebSocket = function (...args) {
     const socketTmp = new nativeWebSocket(...args);
     socket = socketTmp;
 
-    window.WebSocket = nativeWebSocket;
+    // window.WebSocket = nativeWebSocket;
 
     return socketTmp;
 };
