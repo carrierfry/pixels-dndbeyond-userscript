@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.6.3
+// @version      0.6.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -197,7 +197,7 @@ const diceMessageInitial = {
     "persist": false,
     "messageScope": "gameId",
     "messageTarget": "1234567"
-}
+};
 
 const diceMessageRolled = {
     "id": "12345678-1234-1234-1234-1234567890ab",
@@ -247,7 +247,7 @@ const diceMessageRolled = {
     "persist": true,
     "messageScope": "gameId",
     "messageTarget": "1234567"
-}
+};
 
 const toDoLookup = {
     "d4": "You need to roll x d4!",
@@ -256,7 +256,7 @@ const toDoLookup = {
     "d10": "You need to roll x d10!",
     "d12": "You need to roll x d12!",
     "d20": "You need to roll x d20!",
-}
+};
 
 let gamelogClassLookup = {
     "save": "tss-sbzcdr-RollType",
@@ -264,7 +264,7 @@ let gamelogClassLookup = {
     "check": "tss-34aoqs-RollType",
     "to hit": "tss-r93asv-RollType",
     "damage": "tss-t7co22-RollType"
-}
+};
 
 let multiRolls = [];
 
@@ -288,6 +288,7 @@ let characterData = {};
 let gameLogEntries = [];
 let lastHealth = -1;
 let currentlyObserving = false;
+let socketRetryCount = 0;
 
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
@@ -326,15 +327,25 @@ setTimeout(main, 500);
 
 // Main function
 function main() {
-    if (!socket || socket.readyState !== 1) {
+    if (!checkIfCharacterSheetLoaded()) {
+        setTimeout(main, 500);
+        return;
+    }
+
+    if ((!socket || socket.readyState !== 1) && socketRetryCount < 8) {
         console.log("socket not ready");
         setTimeout(main, 500);
+        socketRetryCount++;
         return;
     }
 
     navigator.bluetooth.getAvailability().then(isBluetoothAvailable => {
         if (isBluetoothAvailable) {
-            getCompleteCharacterData();
+            setTimeout(() => {
+                if (socket && socket.readyState === 1) {
+                    getCompleteCharacterData();
+                }
+            }, 1000);
             checkIfBeyond20Installed();
 
             let color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
@@ -386,7 +397,7 @@ function checkForContextMenu() {
     let contextMenus = document.querySelectorAll(".MuiPopover-paper");
     let contextMenu = null;
     contextMenus.forEach((element) => {
-        if (element.innerHTML.includes("Send To:")) {
+        if (element.innerHTML.includes("Roll With:")) {
             contextMenu = element;
         }
     });
@@ -962,7 +973,10 @@ function rollDice(dieType, value) {
         } else {
             initJson = buildInitialJson(dieType, modifier, amount);
         }
-        socket.send(JSON.stringify(initJson));
+
+        if (socket && socket.readyState === 1) {
+            socket.send(JSON.stringify(initJson));
+        }
 
         let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
 
@@ -973,10 +987,12 @@ function rollDice(dieType, value) {
             rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount);
         }
 
-        setTimeout(() => {
-            // console.log("sending value: " + dieValue);
-            socket.send(JSON.stringify(rolledJson));
-        }, 1000);
+        if (socket && socket.readyState === 1) {
+            setTimeout(() => {
+                // console.log("sending value: " + dieValue);
+                socket.send(JSON.stringify(rolledJson));
+            }, 1000);
+        }
 
         if (Object.keys(currentlyExpectedRoll).length > 0 && (currentlyExpectedRoll.advantage || currentlyExpectedRoll.disadvantage)) {
             if (currentlyExpectedRoll.advantage && last2D20Rolls.length === 2 && (last2D20Rolls[0] === 20 || last2D20Rolls[1] === 20)) {
@@ -1584,7 +1600,12 @@ function determineRollType(rollButton) {
 
     if (!pixelMode) {
 
-        let list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.nextSibling.nextSibling.firstChild; // ul
+        let list = undefined;
+        if (target !== getCharacterId()) {
+            list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.nextSibling.nextSibling.firstChild; // ul
+        } else {
+            list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.firstChild;
+        }
         if (list !== null) {
             let children = list.children;
             //children.forEach((element) => {
@@ -1606,6 +1627,7 @@ function determineRollType(rollButton) {
                 }
             };
         }
+
 
         list = rollButton.previousSibling.previousSibling.children[1].firstChild; // ul
         if (list !== null) {
@@ -1845,38 +1867,13 @@ function displayTooltip(tooltipText, x, y) {
     document.querySelector("body").appendChild(tooltip);
 }
 
-// Don't use this yet! It's not working properly
-function reorderGamelog() {
-    let gameLog = document.querySelector("[class*='GameLogEntries']");
-    let children = gameLog.children;
-
-    if (gameLogEntries.length === 0) {
-        gameLogEntries = children;
-    }
-
-    // check if gameLogEntries is different from children
-    if (gameLogEntries.length !== children.length) {
-        // check if first child has class pixels-added-entry
-        let firstChild = children[0];
-        if (firstChild.classList.contains("pixels-added-entry")) {
-            // swap first and second child
-            swap(firstChild, children[1]);
-        }
-
-        gameLogEntries = children;
+function checkIfCharacterSheetLoaded() {
+    if (document.querySelector(".ct-character-header-desktop__group--short-rest") !== null) {
+        return true;
+    } else {
+        return false;
     }
 }
-
-function swap(nodeA, nodeB) {
-    const parentA = nodeA.parentNode;
-    const siblingA = nodeA.nextSibling === nodeB ? nodeA : nodeA.nextSibling;
-
-    // Move `nodeA` to before the `nodeB`
-    nodeB.parentNode.insertBefore(nodeA, nodeB);
-
-    // Move `nodeB` to before the sibling of `nodeA`
-    parentA.insertBefore(nodeB, siblingA);
-};
 
 function containsObject(obj, list) {
     var i;
