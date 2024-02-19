@@ -1,4 +1,4 @@
-const { repeatConnect, requestPixel } = pixelsWebConnect;
+const { repeatConnect, requestPixel, Color } = pixelsWebConnect;
 
 const diceTypes = {
     "d4": {
@@ -182,7 +182,7 @@ const diceMessageInitial = {
     "persist": false,
     "messageScope": "gameId",
     "messageTarget": "1234567"
-}
+};
 
 const diceMessageRolled = {
     "id": "12345678-1234-1234-1234-1234567890ab",
@@ -232,7 +232,7 @@ const diceMessageRolled = {
     "persist": true,
     "messageScope": "gameId",
     "messageTarget": "1234567"
-}
+};
 
 const toDoLookup = {
     "d4": "You need to roll x d4!",
@@ -241,7 +241,15 @@ const toDoLookup = {
     "d10": "You need to roll x d10!",
     "d12": "You need to roll x d12!",
     "d20": "You need to roll x d20!",
-}
+};
+
+let gamelogClassLookup = {
+    "save": "tss-sbzcdr-RollType",
+    "roll": "tss-1xoxte4-RollType",
+    "check": "tss-34aoqs-RollType",
+    "to hit": "tss-r93asv-RollType",
+    "damage": "tss-t7co22-RollType"
+};
 
 let multiRolls = [];
 
@@ -262,6 +270,30 @@ let last2D20Rolls = [];
 let nextDmgRollIsCrit = false;
 let beyond20Installed = false;
 let characterData = {};
+let gameLogEntries = [];
+let lastHealth = -1;
+let currentlyObserving = false;
+let socketRetryCount = 0;
+
+const callback = (mutationList, observer) => {
+    for (const mutation of mutationList) {
+        for (const addedNode of mutation.addedNodes) {
+            if (addedNode.classList !== undefined && !addedNode.classList.contains("pixels-added-entry") && !addedNode.classList.contains("reordered-entry")) {
+                // move element to first position of game log
+                let gameLog = document.querySelector("[class*='GameLogEntries']");
+                if (gameLog !== null) {
+                    setTimeout(() => {
+                        addedNode.classList.add("reordered-entry");
+                        gameLog.prepend(addedNode);
+                        console.log("Reordered entry");
+                    }, 100);
+                }
+            }
+        }
+    }
+};
+
+const observer = new MutationObserver(callback);
 
 // Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
@@ -270,7 +302,7 @@ window.WebSocket = function (...args) {
     const socketTmp = new nativeWebSocket(...args);
     socket = socketTmp;
 
-    window.WebSocket = nativeWebSocket;
+    // window.WebSocket = nativeWebSocket;
 
     return socketTmp;
 };
@@ -280,15 +312,25 @@ setTimeout(main, 500);
 
 // Main function
 function main() {
-    if (!socket || socket.readyState !== 1) {
+    if (!checkIfCharacterSheetLoaded()) {
+        setTimeout(main, 500);
+        return;
+    }
+
+    if ((!socket || socket.readyState !== 1) && socketRetryCount < 8) {
         console.log("socket not ready");
         setTimeout(main, 500);
+        socketRetryCount++;
         return;
     }
 
     navigator.bluetooth.getAvailability().then(isBluetoothAvailable => {
         if (isBluetoothAvailable) {
-            getCompleteCharacterData();
+            setTimeout(() => {
+                if (socket && socket.readyState === 1) {
+                    getCompleteCharacterData();
+                }
+            }, 1000);
             checkIfBeyond20Installed();
 
             let color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
@@ -305,6 +347,7 @@ function main() {
             setInterval(checkForTodo, 300);
             setInterval(listenForRightClicks, 300);
             setInterval(listenForMouseOverOfNavItems, 300);
+            setInterval(checkForHealthChange, 300);
         } else {
             if (navigator.brave !== undefined && navigator.brave.isBrave()) {
                 alert("Please enable Web Bluetooth by opening the following URL:              brave://flags/#brave-web-bluetooth-api");
@@ -339,7 +382,7 @@ function checkForContextMenu() {
     let contextMenus = document.querySelectorAll(".MuiPopover-paper");
     let contextMenu = null;
     contextMenus.forEach((element) => {
-        if (element.innerHTML.includes("Send To:")) {
+        if (element.innerHTML.includes("Roll With:") || element.innerHTML.includes("Roll As:")) {
             contextMenu = element;
         }
     });
@@ -382,6 +425,29 @@ function checkForTodo() {
     }
 }
 
+function checkForHealthChange() {
+    let element = document.querySelector('div[aria-labelledby="ct-health-summary-current-label ct-health-summary-label"]');
+    if (element !== null) {
+        let currentHealth = parseInt(element.innerText);
+
+        if (lastHealth === -1) {
+            lastHealth = currentHealth;
+        }
+
+        if (currentHealth < lastHealth) {
+            lightUpAllPixels("damage");
+        } else if (currentHealth > lastHealth) {
+            lightUpAllPixels("heal");
+        }
+
+        lastHealth = currentHealth;
+    } else if (document.querySelector(".ct-health-summary__deathsaves-icon") !== null && lastHealth > 0) {
+        lightUpAllPixels("damage");
+
+        lastHealth = 0;
+    }
+}
+
 function addRollWithPixelButton(contextMenu) {
     if (!contextMenuShown) {
         let button = document.createElement("button");
@@ -420,6 +486,13 @@ function addRollWithPixelButton(contextMenu) {
                 "scope": scope
             };
 
+            if (window.pixels !== undefined && pixels.length > 0) {
+                for (let i = 0; i < pixels.length; i++) {
+                    if (pixels[i].dieType === dieType) {
+                        lightUpPixel(pixels[i], "waitingForRoll");
+                    }
+                }
+            }
         };
 
         contextMenu.firstChild.appendChild(button);
@@ -518,6 +591,14 @@ function handleMouseLeave(e) {
                     "target": target,
                     "scope": scope
                 };
+
+                if (window.pixels !== undefined && pixels.length > 0) {
+                    for (let i = 0; i < pixels.length; i++) {
+                        if (pixels[i].dieType === dieType) {
+                            lightUpPixel(pixels[i], "waitingForRoll");
+                        }
+                    }
+                }
             };
         });
     }
@@ -877,7 +958,10 @@ function rollDice(dieType, value) {
         } else {
             initJson = buildInitialJson(dieType, modifier, amount);
         }
-        socket.send(JSON.stringify(initJson));
+
+        if (socket && socket.readyState === 1) {
+            socket.send(JSON.stringify(initJson));
+        }
 
         let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
 
@@ -888,10 +972,12 @@ function rollDice(dieType, value) {
             rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount);
         }
 
-        setTimeout(() => {
-            // console.log("sending value: " + dieValue);
-            socket.send(JSON.stringify(rolledJson));
-        }, 1000);
+        if (socket && socket.readyState === 1) {
+            setTimeout(() => {
+                // console.log("sending value: " + dieValue);
+                socket.send(JSON.stringify(rolledJson));
+            }, 1000);
+        }
 
         if (Object.keys(currentlyExpectedRoll).length > 0 && (currentlyExpectedRoll.advantage || currentlyExpectedRoll.disadvantage)) {
             if (currentlyExpectedRoll.advantage && last2D20Rolls.length === 2 && (last2D20Rolls[0] === 20 || last2D20Rolls[1] === 20)) {
@@ -977,10 +1063,33 @@ async function requestMyPixel() {
         });
 
         window.pixels.push(pixel);
+        lightUpPixel(pixel, "connected");
     }
 
     document.querySelector(".pixels-info-box").style.display = "block";
     updateCurrentPixels();
+}
+
+async function lightUpPixel(pixel, reason = undefined) {
+    if (reason === "waitingForRoll") {
+        await pixel.blink(Color.dimYellow, { count: 3, duration: 3000, fade: 0.3 });
+    } else if (reason === "connected") {
+        await pixel.blink(Color.dimGreen, { count: 1, duration: 1500, fade: 0.8 });
+    } else if (reason === "damage") {
+        await pixel.blink(Color.dimRed, { count: 2, duration: 3000, fade: 1 });
+    } else if (reason === "heal") {
+        await pixel.blink(Color.dimGreen, { count: 2, duration: 3000, fade: 1 });
+    } else {
+        await pixel.blink(Color.brightCyan);
+    }
+}
+
+async function lightUpAllPixels(reason = undefined) {
+    if (window.pixels !== undefined) {
+        for (let i = 0; i < pixels.length; i++) {
+            await lightUpPixel(pixels[i], reason);
+        }
+    }
 }
 
 function addPixelModeButton() {
@@ -1041,6 +1150,14 @@ function addPixelModeButton() {
                             "target": target,
                             "scope": scope
                         };
+
+                        if (window.pixels !== undefined && pixels.length > 0) {
+                            for (let i = 0; i < pixels.length; i++) {
+                                if (pixels[i].dieType === dieType) {
+                                    lightUpPixel(pixels[i], "waitingForRoll");
+                                }
+                            }
+                        }
                     };
                 });
             } else {
@@ -1340,9 +1457,16 @@ function getRollTypeFromButton(button) {
 }
 
 function checkForOpenGameLog() {
+    const config = { attributes: false, childList: true, subtree: false };
     let gameLog = document.querySelector("[class*='GameLogEntries']");
 
     if (gameLog !== null) {
+
+        if (!currentlyObserving) {
+            currentlyObserving = true;
+            observer.observe(gameLog, config);
+        }
+
         if (!currentlyUpdatingGameLog) {
             currentlyUpdatingGameLog = true;
             if (gameLogOpen) {
@@ -1370,9 +1494,15 @@ function checkForOpenGameLog() {
             }
             currentlyUpdatingGameLog = false;
         }
+        // reorderGamelog();
     } else {
         gameLogOpen = false;
         rolledJsonArrayIndex = 0;
+
+        if (currentlyObserving) {
+            currentlyObserving = false;
+            observer.disconnect();
+        }
     }
 }
 
@@ -1455,7 +1585,12 @@ function determineRollType(rollButton) {
 
     if (!pixelMode) {
 
-        let list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.nextSibling.nextSibling.firstChild; // ul
+        let list = undefined;
+        if (target !== getCharacterId()) {
+            list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.nextSibling.nextSibling.firstChild; // ul
+        } else {
+            list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.firstChild;
+        }
         if (list !== null) {
             let children = list.children;
             //children.forEach((element) => {
@@ -1477,6 +1612,7 @@ function determineRollType(rollButton) {
                 }
             };
         }
+
 
         list = rollButton.previousSibling.previousSibling.children[1].firstChild; // ul
         if (list !== null) {
@@ -1611,7 +1747,7 @@ window.appendElementToGameLog = function (json) {
 
     let element = document.createElement("li");
     element.className = "tss-8-Self-ref tss-1kuahcg-GameLogEntry-Self-Flex pixels-added-entry";
-    let innerDiv = '<div class="tss-1e6zv06-MessageContainer-Flex"> <div class="tss-dr2its-Line-Flex"><span class="tss-1tj70tb-Sender">CHARACTER_NAME</span></div> <div class="tss-8-Self-ref tss-cmvb5s-Message-Self-Flex"> <div class="tss-iqf1z5-Container-Flex"> <div class="tss-24rg5g-DiceResultContainer-Flex"> <div class="tss-kucurx-Result"> <div class="tss-3-Self-ref tss-1rj7iab-Line-Title-Self"><span class="tss-cx78hg-Action">WHAT</span>: <span class="tss-1xoxte4-RollType">TYPE</span> </div> <div class="tss-16k6xf2-Line-Breakdown"><svg width="32" height="32" fill="currentColor" title="D20" class="tss-1qy7qai-DieIcon"> <path d="M16 1l14 7.45v15l-1 .596L16 31 2 23.55V8.45L16 1zm5 19.868H10l6 7.45 5-7.45zm-13.3.496L5 22.954l7.1 3.874-4.4-5.464zm16.6-.1l-4.4 5.464 7.1-3.874-2.7-1.59zM4 13.716v7.55l2.7-1.59-2.7-5.96zm24 0l-2.7 5.96.2.1 2.5 1.49v-7.55zM16 9.841l-6 9.04h12l-6-9.04zm-2-.596l-9.6.795 3.7 7.947L14 9.245zm4 0l5.8 8.742 3.7-8.047-9.5-.695zm-1-5.464V7.16l7.4.596L17 3.781zm-2 0L7.6 7.755l7.4-.596V3.78z"> </path> </svg><span class="tss-3-Self-ref tss-1nuv2ow-Line-Number-Self" title="COMBINED">COMBINED</span> </div> <div class="tss-1wcf5kt-Line-Notation"><span>DICE_NOTATION</span></div> </div><svg width="19" height="70" viewBox="0 0 19 100" class="tss-1ddr9a0-DividerResult"> <path fill="currentColor" d="M10 0v30H9V0zm0 70v30H9V70zm9-13H0v-3h19zm0-10H0v-3h19z"></path> </svg> <div class="tss-1jo3bnd-TotalContainer-Flex"> <div class="tss-3-Self-ref tss-183k5bv-Total-Self-Flex"><span>VALUE</span></div> </div> </div> <div class="tss-1tqix15-DicePreviewContainer-Flex"> <div class="tss-yuoem4-SetPreviewContainer-Flex"><span class="tss-2auhl5-PreviewThumbnail-DieThumbnailContainer"><span title="2" class="tss-171s1s1-DieThumbnailWrapper"><img class="tss-s4qeha-DieThumbnailImage" src="https://www.dndbeyond.com/dice/images/thumbnails/00101-d20-2.png" alt="d20 roll of 2"></span></span> <div class="tss-xdfhrf-SetPreviewDescriptionContainer"> <div class="tss-1dhkeq7-Divider"></div> <div class="tss-1x8v1yt-SetPreviewActionsContainer-Flex"><span class="tss-15yp4kz-SetPreviewDescription">Rolled with Basic Black: Black</span> </div> </div> </div> <div class="tss-eaaqq4-DieThumbnailsList"></div> </div> </div> </div><time datetime="DATETIME" title="DATETIME_HUMAN" class="tss-1yxh2yy-TimeAgo-TimeAgo">TIME_HUMAN</time> </div>';
+    let innerDiv = '<div class="tss-1e6zv06-MessageContainer-Flex"> <div class="tss-dr2its-Line-Flex"><span class="tss-1tj70tb-Sender">CHARACTER_NAME</span></div> <div class="tss-8-Self-ref tss-cmvb5s-Message-Self-Flex"> <div class="tss-iqf1z5-Container-Flex"> <div class="tss-24rg5g-DiceResultContainer-Flex"> <div class="tss-kucurx-Result"> <div class="tss-3-Self-ref tss-1rj7iab-Line-Title-Self"><span class="tss-cx78hg-Action">WHAT</span>: <span class="CSS_RT">TYPE</span> </div> <div class="tss-16k6xf2-Line-Breakdown"><svg width="32" height="32" fill="currentColor" title="D20" class="tss-1qy7qai-DieIcon"> <path d="M16 1l14 7.45v15l-1 .596L16 31 2 23.55V8.45L16 1zm5 19.868H10l6 7.45 5-7.45zm-13.3.496L5 22.954l7.1 3.874-4.4-5.464zm16.6-.1l-4.4 5.464 7.1-3.874-2.7-1.59zM4 13.716v7.55l2.7-1.59-2.7-5.96zm24 0l-2.7 5.96.2.1 2.5 1.49v-7.55zM16 9.841l-6 9.04h12l-6-9.04zm-2-.596l-9.6.795 3.7 7.947L14 9.245zm4 0l5.8 8.742 3.7-8.047-9.5-.695zm-1-5.464V7.16l7.4.596L17 3.781zm-2 0L7.6 7.755l7.4-.596V3.78z"> </path> </svg><span class="tss-3-Self-ref tss-1nuv2ow-Line-Number-Self" title="COMBINED">COMBINED</span> </div> <div class="tss-1wcf5kt-Line-Notation"><span>DICE_NOTATION</span></div> </div><svg width="19" height="70" viewBox="0 0 19 100" class="tss-1ddr9a0-DividerResult"> <path fill="currentColor" d="M10 0v30H9V0zm0 70v30H9V70zm9-13H0v-3h19zm0-10H0v-3h19z"></path> </svg> <div class="tss-1jo3bnd-TotalContainer-Flex"> <div class="tss-3-Self-ref tss-183k5bv-Total-Self-Flex"><span>VALUE</span></div> </div> </div> <div class="tss-1tqix15-DicePreviewContainer-Flex"> <div class="tss-yuoem4-SetPreviewContainer-Flex"><span class="tss-2auhl5-PreviewThumbnail-DieThumbnailContainer"><span title="2" class="tss-171s1s1-DieThumbnailWrapper"><img class="tss-s4qeha-DieThumbnailImage" src="https://www.dndbeyond.com/dice/images/thumbnails/00101-d20-2.png" alt="d20 roll of 2"></span></span> <div class="tss-xdfhrf-SetPreviewDescriptionContainer"> <div class="tss-1dhkeq7-Divider"></div> <div class="tss-1x8v1yt-SetPreviewActionsContainer-Flex"><span class="tss-15yp4kz-SetPreviewDescription">Rolled with Basic Black: Black</span> </div> </div> </div> <div class="tss-eaaqq4-DieThumbnailsList"></div> </div> </div> </div><time datetime="DATETIME" title="DATETIME_HUMAN" class="tss-1yxh2yy-TimeAgo-TimeAgo">TIME_HUMAN</time> </div>';
 
     innerDiv = innerDiv.replaceAll("CHARACTER_NAME", getCharacterName());
     innerDiv = innerDiv.replaceAll("WHAT", "custom");
@@ -1629,7 +1765,12 @@ window.appendElementToGameLog = function (json) {
     innerDiv = innerDiv.replaceAll("custom", json.data.action);
     innerDiv = innerDiv.replaceAll("roll", json.data.rolls[0].rollType);
 
+    innerDiv = innerDiv.replaceAll("CSS_RT", gamelogClassLookup[json.data.rolls[0].rollType]);
+
     element.innerHTML = innerDiv;
+
+    //add .pixels-added-entry to the class list
+    element.classList.add("pixels-added-entry");
 
     gameLog.prepend(element);
 }
@@ -1711,29 +1852,12 @@ function displayTooltip(tooltipText, x, y) {
     document.querySelector("body").appendChild(tooltip);
 }
 
-// Don't use this yet! It's not working properly
-function reorderGamelog() {
-    let gameLog = document.querySelector("[class*='GameLogEntries']");
-    let children = gameLog.children;
-    let newChildren = [];
-    for (let i = children.length - 1; i >= 0; i--) {
-        newChildren.push(children[i]);
+function checkIfCharacterSheetLoaded() {
+    if (document.querySelector(".ct-character-header-desktop__group--short-rest") !== null) {
+        return true;
+    } else {
+        return false;
     }
-    newChildren.sort((a, b) => {
-        if (a.lastChild.children.length === 0) {
-            return 1;
-        } else if (b.lastChild.children.length === 0) {
-            return 1;
-        }
-        let datetimeA = new Date(a.lastChild.children[a.lastChild.children.length - 1].getAttribute("datetime"));
-        let datetimeB = new Date(b.lastChild.children[a.lastChild.children.length - 1].getAttribute("datetime"));
-        return datetimeB - datetimeA;
-    });
-
-    gameLog.innerHTML = "";
-    newChildren.forEach((element) => {
-        gameLog.appendChild(element);
-    });
 }
 
 function containsObject(obj, list) {

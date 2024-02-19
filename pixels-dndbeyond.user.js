@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.6.4
+// @version      0.6.4.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -397,7 +397,7 @@ function checkForContextMenu() {
     let contextMenus = document.querySelectorAll(".MuiPopover-paper");
     let contextMenu = null;
     contextMenus.forEach((element) => {
-        if (element.innerHTML.includes("Roll With:")) {
+        if (element.innerHTML.includes("Roll With:") || element.innerHTML.includes("Roll As:")) {
             contextMenu = element;
         }
     });
