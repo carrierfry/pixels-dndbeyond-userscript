@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.6.4.1
+// @version      0.7
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -356,6 +356,7 @@ function main() {
             addPixelsLogoButton();
             addPixelModeButton();
             addPixelsInfoBox();
+            addDiceOverviewBox();
             setInterval(checkForOpenGameLog, 500);
             setInterval(checkForMissingPixelButtons, 1000);
             setInterval(checkForContextMenu, 300);
@@ -1053,6 +1054,7 @@ async function requestMyPixel() {
         return;
     }
 
+    pixel.manualDisconnect = false;
     if (!containsObject(pixel, window.pixels)) {
 
         pixel.addEventListener("roll", (face) => {
@@ -1069,18 +1071,26 @@ async function requestMyPixel() {
         pixel.addEventListener("status", (status) => {
             console.log(`=> status: ${status}`);
 
-            if (status === "disconnected") {
-                setTimeout(() => {
-                    console.log("Reconnecting...");
-                    repeatConnect(pixel);
-                }, 1000);
+            if (pixel.manualDisconnect === false) {
+                if (status === "disconnected") {
+                    setTimeout(() => {
+                        console.log("Reconnecting...");
+                        repeatConnect(pixel);
+                    }, 1000);
+                }
+            }
+            if (status === "ready") {
+                pixel.manualDisconnect = false;
+                lightUpPixel(pixel, "connected");
+                addDieToTable(pixel);
             }
         });
 
         window.pixels.push(pixel);
-        lightUpPixel(pixel, "connected");
     }
 
+    lightUpPixel(pixel, "connected");
+    addDieToTable(pixel);
     document.querySelector(".pixels-info-box").style.display = "block";
     updateCurrentPixels();
 }
@@ -1094,6 +1104,8 @@ async function lightUpPixel(pixel, reason = undefined) {
         await pixel.blink(Color.dimRed, { count: 2, duration: 3000, fade: 1 });
     } else if (reason === "heal") {
         await pixel.blink(Color.dimGreen, { count: 2, duration: 3000, fade: 1 });
+    } else if (reason === "quickLightUp") {
+        await pixel.blink(Color.dimMagenta, { count: 3, duration: 1000, fade: 0.8 });
     } else {
         await pixel.blink(Color.brightCyan);
     }
@@ -1227,7 +1239,7 @@ function addPixelsInfoBox() {
     let div = document.createElement("div");
     div.className = "pixels-info-box";
 
-    div.innerHTML = '<div class="pixels-info-box__content"> <div class="pixels-info-box__content__title">Pixel Info</div> <div class="pixels-info-box__content__text"> <p id="pixel-amount" class="no-pixel-warning">You currently have no pixel dice connected!</p> <p class="todo_text">You currently have nothing to do!</p> </div> <div class="pixels-info-box__content__buttons_target"> <button id="everyoneButton">Everyone</button> <button id="selfButton">Self</button> <button id="dmButton">DM</button> </div> <div class="pixels-info-box__content__buttons"> <button id="advButton">Adv.</button> <button id="critButton">Crit</button> <button id="disadvButton">Disadv.</button> </div> </div>';
+    div.innerHTML = '<div class="pixels-info-box__content"> <div class="pixels-info-box__content__title">Pixel Info</div> <div class="pixels-info-box__content__text"> <p id="pixel-amount" class="no-pixel-warning">You currently have no pixel dice connected!</p> <p class="todo_text">You currently have nothing to do!</p> </div> <div class="pixels-info-box__content__buttons_overview"> <button id="diceOverviewButton">Dice Overview</button> </div> <div class="pixels-info-box__content__buttons_target"> <button id="everyoneButton">Everyone</button> <button id="selfButton">Self</button> <button id="dmButton">DM</button> </div> <div class="pixels-info-box__content__buttons"> <button id="advButton">Adv.</button> <button id="critButton">Crit</button> <button id="disadvButton">Disadv.</button> </div> </div>';
     document.querySelector("body").appendChild(div);
 
     // add style to the info box (it should be on the left side of the page and be closed by default)
@@ -1239,13 +1251,16 @@ function addPixelsInfoBox() {
     GM_addStyle(`.pixels-info-box__content__text { position: absolute; top: 10%; left: 0%; width: 100%; height: 80%; font-size: 1em; text-align: center; color: white; overflow-y:auto; }`);
     GM_addStyle(`.pixels-info-box__content__buttons { position: absolute; top: 90%; left: 0%; width: 100%; height: 10%; }`);
     GM_addStyle(`.pixels-info-box__content__buttons_target { position: absolute; top: 75%; left: 0%; width: 100%; height: 10%; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons_overview { position: absolute; top: 60%; left: 0%; width: 100%; height: 10%; }`);
     GM_addStyle(`.pixels-info-box__content__buttons button, .pixels-info-box__content__buttons_target button { width: 30%; height: 100%; margin-left: 1%; background-color: darkgray; border: 2px solid; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons_overview button { width: 94%; height: 100%; margin-left: 1%; background-color: darkgray; border: 2px solid; }`);
     GM_addStyle(`.pixels-info-box__content__buttons #advButton { border-color: lime; }`);
     GM_addStyle(`.pixels-info-box__content__buttons #critButton { border-color: yellow; }`);
     GM_addStyle(`.pixels-info-box__content__buttons #disadvButton { border-color: red; }`);
     GM_addStyle(`.pixels-info-box__content__buttons_target #everyoneButton { border-color: white; }`);
     GM_addStyle(`.pixels-info-box__content__buttons_target #selfButton { border-color: white; }`);
     GM_addStyle(`.pixels-info-box__content__buttons_target #dmButton { border-color: white; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons_overview #diceOverviewButton { border-color: white; }`);
     GM_addStyle(`.no-pixel-warning { color: yellow; }`);
 
     document.querySelectorAll(".pixels-info-box__content__buttons button").forEach((element) => {
@@ -1259,6 +1274,16 @@ function addPixelsInfoBox() {
             setRollTarget(element.id);
         };
     });
+
+    document.querySelector("#diceOverviewButton").onclick = (e) => {
+        e.preventDefault();
+
+        if (document.querySelector(".dice-overview-box").style.display === "none") {
+            document.querySelector(".dice-overview-box").style.display = "block";
+        } else {
+            document.querySelector(".dice-overview-box").style.display = "none";
+        }
+    };
 
     // the box should be closed by default
     div.style.display = "none";
@@ -1281,6 +1306,122 @@ function addPixelsInfoBox() {
 
     // add style to the button
     GM_addStyle(`.pixels-info-box__button { position: fixed; top: 18px; left: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
+}
+
+function addDiceOverviewBox() {
+    let div = document.createElement("div");
+    div.className = "dice-overview-box";
+
+    // the box should have a title and a list of all dice that are currently connected
+    div.innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
+    document.querySelector("body").appendChild(div);
+
+    // add style to the info box (it should be in the middle of the page and be closed by default)
+
+    GM_addStyle(`.dice-overview-box { position: fixed; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
+    GM_addStyle(`.dice-overview-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
+    GM_addStyle(`.dice-overview-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
+    GM_addStyle(`.dice-overview-box__content__table { position: absolute; top: 10%; left: 0%; width: 100%; height: 90%; }`);
+    GM_addStyle(`.dice-overview-box__content__table table { width: 100%; color: white; }`);
+    GM_addStyle(`.dice-overview-box__content__table table, th, td { border: 1px solid white; }`);
+    // make text in table centered
+    GM_addStyle(`.dice-overview-box__content__table table th, td { text-align: center; }`);
+    GM_addStyle(`.dice-overview-box__content__table table td a { color: white; }`);
+    GM_addStyle(`.dice-overview-box__content__table table td a:hover { cursor: pointer; color: yellow; }`);
+    //make the box movable
+    GM_addStyle(`.dice-overview-box { -webkit-app-region: drag; }`);
+
+
+    // the box should be closed by default
+    div.style.display = "none";
+
+    let button = document.querySelector("#closeDiceOverviewButton");
+    button.onclick = (e) => {
+        e.preventDefault();
+        // console.log("Dice overview box button clicked");
+
+        div.style.display = "none";
+    };
+
+    // add style to the button (it should be in the top right corner of the box)
+    GM_addStyle(`.dice-overview-box__button { position: absolute; top: 0%; right: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; color: white; z-index: 999`);
+}
+
+function addDieToTable(pixel) {
+    let table = document.querySelector("#diceTable");
+    let newRow = undefined;
+    let onlyUpdate = false;
+
+    // insert a new cell for each column in the row
+    let typeCell = undefined;
+    let nameCell = undefined;
+    let connectionStatusCell = undefined;
+    let rollStatusCell = undefined;
+    let batteryCell = undefined;
+    let faceCell = undefined;
+    let actionCell = undefined;
+
+    // check if a row for this pixel already exists
+    if (document.getElementById("pixel" + pixel.pixelId) === null) {
+        newRow = table.insertRow(-1);
+
+        // insert a new cell for each column in the row
+        typeCell = newRow.insertCell(0);
+        nameCell = newRow.insertCell(1);
+        connectionStatusCell = newRow.insertCell(2);
+        rollStatusCell = newRow.insertCell(3);
+        batteryCell = newRow.insertCell(4);
+        faceCell = newRow.insertCell(5);
+        actionCell = newRow.insertCell(6);
+    } else {
+        newRow = document.getElementById("pixel" + pixel.pixelId);
+        onlyUpdate = true;
+
+        typeCell = newRow.children[0];
+        nameCell = newRow.children[1];
+        connectionStatusCell = newRow.children[2];
+        rollStatusCell = newRow.children[3];
+        batteryCell = newRow.children[4];
+        faceCell = newRow.children[5];
+        actionCell = newRow.children[6];
+    }
+
+    if (!onlyUpdate) {
+        newRow.id = "pixel" + pixel.pixelId;
+        actionCell.innerHTML = '<a id="pixel' + pixel.pixelId + 'LightUp">Light up</a> | <a id="pixel' + pixel.pixelId + 'Disconnect">Disconnect</a>';
+
+        document.querySelector("#pixel" + pixel.pixelId + "LightUp").addEventListener('click', function (e) {
+            e.preventDefault();
+            console.log("Light up button clicked");
+
+            lightUpPixel(pixel, "quickLightUp");
+        });
+
+        document.querySelector("#pixel" + pixel.pixelId + "Disconnect").addEventListener('click', function (e) {
+            e.preventDefault();
+            console.log("Disconnect button clicked");
+
+            pixel.manualDisconnect = true;
+            pixel.disconnect();
+            updateCurrentPixels();
+        });
+    }
+
+    // add the data to the cells
+    typeCell.innerHTML = pixel.dieType;
+    nameCell.innerHTML = pixel.name;
+    connectionStatusCell.innerHTML = pixel.status;
+    rollStatusCell.innerHTML = pixel.rollState;
+    batteryCell.innerHTML = pixel.batteryLevel + "%";
+    faceCell.innerHTML = pixel.currentFace;
+
+    if (!pixel.manualDisconnect) {
+        setTimeout(() => {
+            addDieToTable(pixel);
+        }, 300);
+    } else {
+        newRow.remove();
+    }
 }
 
 function displayWhatUserNeedsToDo(text = undefined) {
@@ -1314,8 +1455,9 @@ function updateCurrentPixels() {
 
         text += "<br><br>";
         for (const [key, value] of Object.entries(diceTypes)) {
-            text += value + "x " + key + "<br>";
+            text += value + "x " + key + ", ";
         }
+        text = text.substring(0, text.length - 2);
     }
     document.querySelector("#pixel-amount").innerHTML = text;
 }
