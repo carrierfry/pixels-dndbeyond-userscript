@@ -57,12 +57,9 @@ Pixel Mode is not available when using [Beyond20](https://beyond20.here-for-more
 - [x] ~~Show the roll in the game log to the user itself (currently only the other players who are in the session can see it live)~~
 
 ## Known bugs
-- Currently, the script only works if you open the character sheet in DnD Beyond directly (for example by reloading the page). If you open the character sheet by clicking on `view` in your campaign or character overwie, it won't work. (This is because DnD Beyond is a single site application and the script only runs once when the page is loaded.)
+- Currently, the script only works if you open the character sheet in DnD Beyond directly (for example by reloading the page). If you open the character sheet by clicking on `view` in your campaign or character overwie, it won't work. (If you are using the chrome web store version, it will work in both cases)
 - If you are connected to your pixel dice and reload the page, you have to reconnect to your pixel dice again. (It shows that the dice is already connected, but it doesn't work until you reconnect.)
 - d100 rolls are not supported currently (as you need to roll 2 d10s for that). Instead you have to roll 2 d10s separately and add them together in your head.
-- Pixel Mode has a few bugs when switching to a different tab on the character sheet (e.g. from `ACTIONS` to `SPELLS`), so it's recommended to disable Pixel Mode before switching tabs!
-- If your character is not in any campaign, the script won't work.
-- If you use [Beyond20](https://beyond20.here-for-more.info/), there are buttons that won't work in pixel mode and the rolls currently won't get sent to Roll20.
 - Healing spells can only be rolled with pixel by using the pixel mode. Other spells can also be rolled with pixel by using `right click -> roll with pixel` on the damage button.
 
 ## Software used
