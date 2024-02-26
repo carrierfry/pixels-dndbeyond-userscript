@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.7.1
+// @version      0.7.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -366,10 +366,16 @@ function main() {
             setInterval(listenForMouseOverOfNavItems, 300);
             setInterval(checkForHealthChange, 300);
         } else {
+            let alertText = "";
+            if (detectOS() === "Linux") {
+                alertText = "Make sure that Web Bluetooth is enabled: chrome://flags/#enable-web-bluetooth. ";
+            }
             if (navigator.brave !== undefined && navigator.brave.isBrave()) {
-                alert("Please enable Web Bluetooth by opening the following URL:              brave://flags/#brave-web-bluetooth-api");
+                alertText += "Please enable Web Bluetooth by opening the following URL brave://flags/#brave-web-bluetooth-api";
+                alert(alertText);
             } else {
-                alert("Your browser does not support Web Bluetooth. Please use a browser that supports Web Bluetooth.");
+                alertText += "Make sure you have a Bluetooth Receiver connected. If that's the case, your browser does not support the Bluetooth Web API. Use a different browser";
+                alert(alertText);
             }
         }
     });
@@ -2092,4 +2098,27 @@ function containsObject(obj, list) {
     }
 
     return false;
+}
+
+function detectOS() {
+    let userAgent = window.navigator.userAgent,
+        platform = window.navigator.platform,
+        macosPlatforms = ['Macintosh', 'MacIntel', 'MacPPC', 'Mac68K'],
+        windowsPlatforms = ['Win32', 'Win64', 'Windows', 'WinCE'],
+        iosPlatforms = ['iPhone', 'iPad', 'iPod'],
+        os = null;
+
+    if (macosPlatforms.indexOf(platform) !== -1) {
+        os = 'Mac OS';
+    } else if (iosPlatforms.indexOf(platform) !== -1) {
+        os = 'iOS';
+    } else if (windowsPlatforms.indexOf(platform) !== -1) {
+        os = 'Windows';
+    } else if (/Android/.test(userAgent)) {
+        os = 'Android';
+    } else if (!os && /Linux/.test(platform)) {
+        os = 'Linux';
+    }
+
+    return os;
 }
