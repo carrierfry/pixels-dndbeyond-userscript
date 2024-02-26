@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.7
+// @version      0.7.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -13,7 +13,7 @@
 // @require      https://unpkg.com/@systemic-games/pixels-web-connect@1.1.1/dist/umd/index.js
 // ==/UserScript==
 
-const { repeatConnect, requestPixel, Color } = pixelsWebConnect;
+const { repeatConnect, requestPixel, getPixel, Color } = pixelsWebConnect;
 
 const diceTypes = {
     "d4": {
@@ -357,6 +357,7 @@ function main() {
             addPixelModeButton();
             addPixelsInfoBox();
             addDiceOverviewBox();
+            checkForAutoConnect();
             setInterval(checkForOpenGameLog, 500);
             setInterval(checkForMissingPixelButtons, 1000);
             setInterval(checkForContextMenu, 300);
@@ -1039,11 +1040,61 @@ function rollDice(dieType, value) {
 
 // Connects to a Pixel via the Pixels Web Connect library
 async function requestMyPixel() {
+
+    const pixel = await requestPixel();
+
+    handleConnection(pixel);
+}
+
+async function lightUpPixel(pixel, reason = undefined) {
+    if (reason === "waitingForRoll") {
+        await pixel.blink(Color.dimYellow, { count: 3, duration: 3000, fade: 0.3 });
+    } else if (reason === "connected") {
+        await pixel.blink(Color.dimGreen, { count: 1, duration: 1500, fade: 0.8 });
+    } else if (reason === "damage") {
+        await pixel.blink(Color.dimRed, { count: 2, duration: 3000, fade: 1 });
+    } else if (reason === "heal") {
+        await pixel.blink(Color.dimGreen, { count: 2, duration: 3000, fade: 1 });
+    } else if (reason === "quickLightUp") {
+        await pixel.blink(Color.dimMagenta, { count: 3, duration: 1000, fade: 0.8 });
+    } else {
+        await pixel.blink(Color.brightCyan);
+    }
+}
+
+async function lightUpAllPixels(reason = undefined) {
+    if (window.pixels !== undefined) {
+        for (let i = 0; i < pixels.length; i++) {
+            await lightUpPixel(pixels[i], reason);
+        }
+    }
+}
+
+async function checkForAutoConnect() {
+    if (!!navigator?.bluetooth?.getDevices) {
+        let systemIds = JSON.parse(localStorage.getItem("pixelsSystemIds"));
+        if (systemIds !== null) {
+            for (let i = 0; i < systemIds.length; i++) {
+                let pixel = await getPixel(systemIds[i]);
+
+                if (pixel !== undefined) {
+                    handleConnection(pixel);
+                }
+            }
+        }
+    }
+}
+
+async function handleConnection(pixel) {
+
     if (!window.pixels) {
         window.pixels = [];
     }
 
-    const pixel = await requestPixel();
+    let systemIds = JSON.parse(localStorage.getItem("pixelsSystemIds"));
+    if (systemIds === null) {
+        systemIds = [];
+    }
 
     console.log("Connecting...");
     await repeatConnect(pixel);
@@ -1093,29 +1144,10 @@ async function requestMyPixel() {
     addDieToTable(pixel);
     document.querySelector(".pixels-info-box").style.display = "block";
     updateCurrentPixels();
-}
 
-async function lightUpPixel(pixel, reason = undefined) {
-    if (reason === "waitingForRoll") {
-        await pixel.blink(Color.dimYellow, { count: 3, duration: 3000, fade: 0.3 });
-    } else if (reason === "connected") {
-        await pixel.blink(Color.dimGreen, { count: 1, duration: 1500, fade: 0.8 });
-    } else if (reason === "damage") {
-        await pixel.blink(Color.dimRed, { count: 2, duration: 3000, fade: 1 });
-    } else if (reason === "heal") {
-        await pixel.blink(Color.dimGreen, { count: 2, duration: 3000, fade: 1 });
-    } else if (reason === "quickLightUp") {
-        await pixel.blink(Color.dimMagenta, { count: 3, duration: 1000, fade: 0.8 });
-    } else {
-        await pixel.blink(Color.brightCyan);
-    }
-}
-
-async function lightUpAllPixels(reason = undefined) {
-    if (window.pixels !== undefined) {
-        for (let i = 0; i < pixels.length; i++) {
-            await lightUpPixel(pixels[i], reason);
-        }
+    if (!containsObject(pixel.systemId, systemIds)) {
+        systemIds.push(pixel.systemId);
+        localStorage.setItem("pixelsSystemIds", JSON.stringify(systemIds));
     }
 }
 
@@ -1313,14 +1345,43 @@ function addDiceOverviewBox() {
     div.className = "dice-overview-box";
 
     // the box should have a title and a list of all dice that are currently connected
-    div.innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
+    let innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
+
+    if (!!navigator?.bluetooth?.getDevices) {
+        innerHTML = innerHTML.replaceAll('AUTO_STATUS', '<span class="pixelsAutoReconnectStatus" style="color: lime">enabled</span>');
+    } else {
+        innerHTML = innerHTML.replaceAll('AUTO_STATUS', '<span class="pixelsAutoReconnectStatus" style="color: #ff3333">disabled</span>');
+    }
+    div.innerHTML = innerHTML;
+
     document.querySelector("body").appendChild(div);
+
+    if (!(!!navigator?.bluetooth?.getDevices)) {
+        document.querySelector(".pixelsAutoReconnectStatus").onmouseover = (e) => {
+            e.preventDefault();
+            if (!tootltipShown) {
+                let topleft = getPageTopLeft(div.children[0].children[2].children[0]);
+                displayTooltip('To enable auto-reconnect, make sure you have the "Use the new permissions backend for Web Bluetooth" flag enabled. You can do so by opening "chrome://flags" in a new tab', parseInt(topleft.left), parseInt(topleft.top) - 80);
+
+                tootltipShown = true;
+            }
+        }
+
+        document.querySelector(".pixelsAutoReconnectStatus").onmouseout = (e) => {
+            e.preventDefault();
+            if (tootltipShown) {
+                document.querySelector(".tippy-popper--pixel-mode").remove();
+                tootltipShown = false;
+            }
+        }
+    }
 
     // add style to the info box (it should be in the middle of the page and be closed by default)
 
     GM_addStyle(`.dice-overview-box { position: fixed; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
     GM_addStyle(`.dice-overview-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
     GM_addStyle(`.dice-overview-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
+    GM_addStyle(`.dice-overview-box__content__features { position: absolute; top: 5%; left: 0%; width: 100%; height: 10%; font-size: 1em; text-align: center; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__table { position: absolute; top: 10%; left: 0%; width: 100%; height: 90%; }`);
     GM_addStyle(`.dice-overview-box__content__table table { width: 100%; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__table table, th, td { border: 1px solid white; }`);
@@ -1403,6 +1464,11 @@ function addDieToTable(pixel) {
 
             pixel.manualDisconnect = true;
             pixel.disconnect();
+            let systemIds = JSON.parse(localStorage.getItem("pixelsSystemIds"));
+            if (systemIds !== null) {
+                systemIds = systemIds.filter(e => e !== pixel.systemId);
+                localStorage.setItem("pixelsSystemIds", JSON.stringify(systemIds));
+            }
             updateCurrentPixels();
         });
     }
