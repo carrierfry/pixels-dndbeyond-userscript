@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.7.2
+// @version      0.7.2.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1097,6 +1097,8 @@ async function handleConnection(pixel) {
         window.pixels = [];
     }
 
+    addDieToTable(pixel);
+
     let systemIds = JSON.parse(localStorage.getItem("pixelsSystemIds"));
     if (systemIds === null) {
         systemIds = [];
@@ -1147,7 +1149,6 @@ async function handleConnection(pixel) {
     }
 
     lightUpPixel(pixel, "connected");
-    addDieToTable(pixel);
     document.querySelector(".pixels-info-box").style.display = "block";
     updateCurrentPixels();
 
