@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.7.2.2
+// @version      0.7.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -290,6 +290,13 @@ let lastHealth = -1;
 let currentlyObserving = false;
 let socketRetryCount = 0;
 
+let nextAdvantageRoll = false;
+let nextDisadvantageRoll = false;
+let nextCriticalRoll = false;
+let nextEveryoneRoll = false;
+let nextSelfRoll = false;
+let nextDMRoll = false;
+
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
         for (const addedNode of mutation.addedNodes) {
@@ -509,6 +516,13 @@ function addRollWithPixelButton(contextMenu) {
                 "scope": scope
             };
 
+            nextAdvantageRoll = false;
+            nextDisadvantageRoll = false;
+            nextCriticalRoll = false;
+            nextEveryoneRoll = false;
+            nextSelfRoll = false;
+            nextDMRoll = false;
+
             if (window.pixels !== undefined && pixels.length > 0) {
                 for (let i = 0; i < pixels.length; i++) {
                     if (pixels[i].dieType === dieType) {
@@ -614,6 +628,26 @@ function handleMouseLeave(e) {
                     "target": target,
                     "scope": scope
                 };
+
+                if (nextAdvantageRoll && !dis && !crit) {
+                    currentlyExpectedRoll.advantage = true;
+                }
+                if (nextDisadvantageRoll && !adv && !crit) {
+                    currentlyExpectedRoll.disadvantage = true;
+                }
+                if (nextCriticalRoll && !adv && !dis) {
+                    currentlyExpectedRoll.critical = true;
+                }
+                if (nextEveryoneRoll) {
+                    setRollTarget("everyoneButton");
+                }
+                if (nextSelfRoll) {
+                    setRollTarget("selfButton");
+                }
+                if (nextDMRoll) {
+                    setRollTarget("dmButton");
+                }
+
 
                 if (window.pixels !== undefined && pixels.length > 0) {
                     for (let i = 0; i < pixels.length; i++) {
@@ -1039,6 +1073,13 @@ function rollDice(dieType, value) {
         document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
         document.querySelector("#selfButton").style.backgroundColor = "darkgray";
         document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+
+        nextAdvantageRoll = false;
+        nextDisadvantageRoll = false;
+        nextCriticalRoll = false;
+        nextEveryoneRoll = false;
+        nextSelfRoll = false;
+        nextDMRoll = false;
     } else {
         console.log("waiting for more rolls");
     }
@@ -1215,6 +1256,25 @@ function addPixelModeButton() {
                             "target": target,
                             "scope": scope
                         };
+
+                        if (nextAdvantageRoll && !dis && !crit) {
+                            currentlyExpectedRoll.advantage = true;
+                        }
+                        if (nextDisadvantageRoll && !adv && !crit) {
+                            currentlyExpectedRoll.disadvantage = true;
+                        }
+                        if (nextCriticalRoll && !adv && !dis) {
+                            currentlyExpectedRoll.critical = true;
+                        }
+                        if (nextEveryoneRoll) {
+                            setRollTarget("everyoneButton");
+                        }
+                        if (nextSelfRoll) {
+                            setRollTarget("selfButton");
+                        }
+                        if (nextDMRoll) {
+                            setRollTarget("dmButton");
+                        }
 
                         if (window.pixels !== undefined && pixels.length > 0) {
                             for (let i = 0; i < pixels.length; i++) {
@@ -1737,7 +1797,7 @@ function checkForOpenGameLog() {
 
 function setRollType(type) {
     if (Object.keys(currentlyExpectedRoll).length !== 0) {
-        if (type === "advButton" || type === "advantage") {
+        if (type === "advButton" || type === "advantage" || nextAdvantageRoll) {
             currentlyExpectedRoll.advantage = !currentlyExpectedRoll.advantage;
             currentlyExpectedRoll.disadvantage = false;
             currentlyExpectedRoll.critical = false;
@@ -1748,7 +1808,7 @@ function setRollType(type) {
             } else {
                 document.querySelector("#advButton").style.backgroundColor = "darkgray";
             }
-        } else if (type === "critButton" || type === "critical") {
+        } else if (type === "critButton" || type === "critical" || nextCriticalRoll) {
             currentlyExpectedRoll.critical = !currentlyExpectedRoll.critical;
             currentlyExpectedRoll.advantage = false;
             currentlyExpectedRoll.disadvantage = false;
@@ -1759,7 +1819,7 @@ function setRollType(type) {
             } else {
                 document.querySelector("#critButton").style.backgroundColor = "darkgray";
             }
-        } else if (type === "disadvButton" || type === "disadvantage") {
+        } else if (type === "disadvButton" || type === "disadvantage" || nextDisadvantageRoll) {
             currentlyExpectedRoll.disadvantage = !currentlyExpectedRoll.disadvantage;
             currentlyExpectedRoll.advantage = false;
             currentlyExpectedRoll.critical = false;
@@ -1778,29 +1838,89 @@ function setRollType(type) {
             document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
             document.querySelector("#critButton").style.backgroundColor = "darkgray";
         }
+    } else {
+        if (type === "advButton" || type === "advantage") {
+            document.querySelector("#advButton").style.backgroundColor = "lime";
+            document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+            document.querySelector("#critButton").style.backgroundColor = "darkgray";
+
+            nextAdvantageRoll = true;
+            nextDisadvantageRoll = false;
+            nextCriticalRoll = false;
+        } else if (type === "critButton" || type === "critical") {
+            document.querySelector("#critButton").style.backgroundColor = "yellow";
+            document.querySelector("#advButton").style.backgroundColor = "darkgray";
+            document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+
+            nextAdvantageRoll = false;
+            nextDisadvantageRoll = false;
+            nextCriticalRoll = true;
+        } else if (type === "disadvButton" || type === "disadvantage") {
+            document.querySelector("#disadvButton").style.backgroundColor = "red";
+            document.querySelector("#advButton").style.backgroundColor = "darkgray";
+            document.querySelector("#critButton").style.backgroundColor = "darkgray";
+
+            nextAdvantageRoll = false;
+            nextDisadvantageRoll = true;
+            nextCriticalRoll = false;
+        } else if (type === "normal") {
+            document.querySelector("#advButton").style.backgroundColor = "darkgray";
+            document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+            document.querySelector("#critButton").style.backgroundColor = "darkgray";
+
+            nextAdvantageRoll = false;
+            nextDisadvantageRoll = false;
+            nextCriticalRoll = false;
+        }
     }
 }
 
 function setRollTarget(type) {
     if (Object.keys(currentlyExpectedRoll).length !== 0) {
-        if (type === "everyoneButton") {
+        if (type === "everyoneButton" || nextEveryoneRoll) {
             currentlyExpectedRoll.target = getGameId();
             currentlyExpectedRoll.scope = "gameId";
             document.querySelector("#everyoneButton").style.backgroundColor = "white";
             document.querySelector("#selfButton").style.backgroundColor = "darkgray";
             document.querySelector("#dmButton").style.backgroundColor = "darkgray";
-        } else if (type === "selfButton") {
+        } else if (type === "selfButton" || nextSelfRoll) {
             currentlyExpectedRoll.target = getUserId();
             currentlyExpectedRoll.scope = "userId";
             document.querySelector("#selfButton").style.backgroundColor = "white";
             document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
             document.querySelector("#dmButton").style.backgroundColor = "darkgray";
-        } else if (type === "dmButton") {
+        } else if (type === "dmButton" || nextDMRoll) {
             currentlyExpectedRoll.target = characterData.data.dmId;
             currentlyExpectedRoll.scope = "userId";
             document.querySelector("#dmButton").style.backgroundColor = "white";
             document.querySelector("#selfButton").style.backgroundColor = "darkgray";
             document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
+        }
+    } else {
+        if (type === "everyoneButton") {
+            document.querySelector("#everyoneButton").style.backgroundColor = "white";
+            document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+            document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+
+            nextEveryoneRoll = true;
+            nextSelfRoll = false;
+            nextDMRoll = false;
+        } else if (type === "selfButton") {
+            document.querySelector("#selfButton").style.backgroundColor = "white";
+            document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
+            document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+
+            nextEveryoneRoll = false;
+            nextSelfRoll = true;
+            nextDMRoll = false;
+        } else if (type === "dmButton") {
+            document.querySelector("#dmButton").style.backgroundColor = "white";
+            document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+            document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
+
+            nextEveryoneRoll = false;
+            nextSelfRoll = false;
+            nextDMRoll = true;
         }
     }
 }
@@ -1853,12 +1973,15 @@ function determineRollType(rollButton) {
                     if (element.children[1].innerHTML.includes("Every")) {
                         target = getGameId();
                         scope = "gameId";
+                        setRollTarget("everyoneButton");
                     } else if (element.children[1].innerHTML.includes("Self")) {
                         target = getUserId();
                         scope = "userId";
+                        setRollTarget("selfButton");
                     } else if (element.children[1].innerHTML.includes("Master")) {
                         target = characterData.data.dmId;
                         scope = "userId";
+                        setRollTarget("dmButton");
                     }
                 }
             };
