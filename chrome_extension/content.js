@@ -1,4 +1,4 @@
-const { repeatConnect, requestPixel, Color } = pixelsWebConnect;
+const { repeatConnect, requestPixel, getPixel, Color } = pixelsWebConnect;
 
 const diceTypes = {
     "d4": {
@@ -275,6 +275,13 @@ let lastHealth = -1;
 let currentlyObserving = false;
 let socketRetryCount = 0;
 
+let nextAdvantageRoll = false;
+let nextDisadvantageRoll = false;
+let nextCriticalRoll = false;
+let nextEveryoneRoll = false;
+let nextSelfRoll = false;
+let nextDMRoll = false;
+
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
         for (const addedNode of mutation.addedNodes) {
@@ -341,6 +348,8 @@ function main() {
             addPixelsLogoButton();
             addPixelModeButton();
             addPixelsInfoBox();
+            addDiceOverviewBox();
+            checkForAutoConnect();
             setInterval(checkForOpenGameLog, 500);
             setInterval(checkForMissingPixelButtons, 1000);
             setInterval(checkForContextMenu, 300);
@@ -349,10 +358,16 @@ function main() {
             setInterval(listenForMouseOverOfNavItems, 300);
             setInterval(checkForHealthChange, 300);
         } else {
+            let alertText = "";
+            if (detectOS() === "Linux") {
+                alertText = "Make sure that Web Bluetooth is enabled: chrome://flags/#enable-web-bluetooth. ";
+            }
             if (navigator.brave !== undefined && navigator.brave.isBrave()) {
-                alert("Please enable Web Bluetooth by opening the following URL:              brave://flags/#brave-web-bluetooth-api");
+                alertText += "Please enable Web Bluetooth by opening the following URL brave://flags/#brave-web-bluetooth-api";
+                alert(alertText);
             } else {
-                alert("Your browser does not support Web Bluetooth. Please use a browser that supports Web Bluetooth.");
+                alertText += "Make sure you have a Bluetooth Receiver connected. If that's the case, your browser does not support the Bluetooth Web API. Use a different browser";
+                alert(alertText);
             }
         }
     });
@@ -486,6 +501,13 @@ function addRollWithPixelButton(contextMenu) {
                 "scope": scope
             };
 
+            nextAdvantageRoll = false;
+            nextDisadvantageRoll = false;
+            nextCriticalRoll = false;
+            nextEveryoneRoll = false;
+            nextSelfRoll = false;
+            nextDMRoll = false;
+
             if (window.pixels !== undefined && pixels.length > 0) {
                 for (let i = 0; i < pixels.length; i++) {
                     if (pixels[i].dieType === dieType) {
@@ -591,6 +613,26 @@ function handleMouseLeave(e) {
                     "target": target,
                     "scope": scope
                 };
+
+                if (nextAdvantageRoll && !dis && !crit) {
+                    currentlyExpectedRoll.advantage = true;
+                }
+                if (nextDisadvantageRoll && !adv && !crit) {
+                    currentlyExpectedRoll.disadvantage = true;
+                }
+                if (nextCriticalRoll && !adv && !dis) {
+                    currentlyExpectedRoll.critical = true;
+                }
+                if (nextEveryoneRoll) {
+                    setRollTarget("everyoneButton");
+                }
+                if (nextSelfRoll) {
+                    setRollTarget("selfButton");
+                }
+                if (nextDMRoll) {
+                    setRollTarget("dmButton");
+                }
+
 
                 if (window.pixels !== undefined && pixels.length > 0) {
                     for (let i = 0; i < pixels.length; i++) {
@@ -1016,6 +1058,13 @@ function rollDice(dieType, value) {
         document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
         document.querySelector("#selfButton").style.backgroundColor = "darkgray";
         document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+
+        nextAdvantageRoll = false;
+        nextDisadvantageRoll = false;
+        nextCriticalRoll = false;
+        nextEveryoneRoll = false;
+        nextSelfRoll = false;
+        nextDMRoll = false;
     } else {
         console.log("waiting for more rolls");
     }
@@ -1023,11 +1072,61 @@ function rollDice(dieType, value) {
 
 // Connects to a Pixel via the Pixels Web Connect library
 async function requestMyPixel() {
+
+    const pixel = await requestPixel();
+
+    handleConnection(pixel);
+}
+
+async function lightUpPixel(pixel, reason = undefined) {
+    if (reason === "waitingForRoll") {
+        await pixel.blink(Color.dimYellow, { count: 3, duration: 3000, fade: 0.3 });
+    } else if (reason === "connected") {
+        await pixel.blink(Color.dimGreen, { count: 1, duration: 1500, fade: 0.8 });
+    } else if (reason === "damage") {
+        await pixel.blink(Color.dimRed, { count: 2, duration: 3000, fade: 1 });
+    } else if (reason === "heal") {
+        await pixel.blink(Color.dimGreen, { count: 2, duration: 3000, fade: 1 });
+    } else if (reason === "quickLightUp") {
+        await pixel.blink(Color.dimMagenta, { count: 3, duration: 1000, fade: 0.8 });
+    } else {
+        await pixel.blink(Color.brightCyan);
+    }
+}
+
+async function lightUpAllPixels(reason = undefined) {
+    if (window.pixels !== undefined) {
+        for (let i = 0; i < pixels.length; i++) {
+            await lightUpPixel(pixels[i], reason);
+        }
+    }
+}
+
+async function checkForAutoConnect() {
+    if (!!navigator?.bluetooth?.getDevices) {
+        let systemIds = JSON.parse(localStorage.getItem("pixelsSystemIds"));
+        if (systemIds !== null) {
+            for (let i = 0; i < systemIds.length; i++) {
+                let pixel = await getPixel(systemIds[i]);
+
+                if (pixel !== undefined) {
+                    handleConnection(pixel);
+                }
+            }
+        }
+    }
+}
+
+async function handleConnection(pixel) {
+
     if (!window.pixels) {
         window.pixels = [];
     }
 
-    const pixel = await requestPixel();
+    let systemIds = JSON.parse(localStorage.getItem("pixelsSystemIds"));
+    if (systemIds === null) {
+        systemIds = [];
+    }
 
     console.log("Connecting...");
     await repeatConnect(pixel);
@@ -1038,6 +1137,7 @@ async function requestMyPixel() {
         return;
     }
 
+    pixel.manualDisconnect = false;
     if (!containsObject(pixel, window.pixels)) {
 
         pixel.addEventListener("roll", (face) => {
@@ -1054,41 +1154,32 @@ async function requestMyPixel() {
         pixel.addEventListener("status", (status) => {
             console.log(`=> status: ${status}`);
 
-            if (status === "disconnected") {
-                setTimeout(() => {
-                    console.log("Reconnecting...");
-                    repeatConnect(pixel);
-                }, 1000);
+            if (pixel.manualDisconnect === false) {
+                if (status === "disconnected") {
+                    setTimeout(() => {
+                        console.log("Reconnecting...");
+                        repeatConnect(pixel);
+                    }, 1000);
+                }
+            }
+            if (status === "ready") {
+                pixel.manualDisconnect = false;
+                lightUpPixel(pixel, "connected");
+                addDieToTable(pixel);
             }
         });
 
         window.pixels.push(pixel);
-        lightUpPixel(pixel, "connected");
     }
 
+    addDieToTable(pixel);
+    lightUpPixel(pixel, "connected");
     document.querySelector(".pixels-info-box").style.display = "block";
     updateCurrentPixels();
-}
 
-async function lightUpPixel(pixel, reason = undefined) {
-    if (reason === "waitingForRoll") {
-        await pixel.blink(Color.dimYellow, { count: 3, duration: 3000, fade: 0.3 });
-    } else if (reason === "connected") {
-        await pixel.blink(Color.dimGreen, { count: 1, duration: 1500, fade: 0.8 });
-    } else if (reason === "damage") {
-        await pixel.blink(Color.dimRed, { count: 2, duration: 3000, fade: 1 });
-    } else if (reason === "heal") {
-        await pixel.blink(Color.dimGreen, { count: 2, duration: 3000, fade: 1 });
-    } else {
-        await pixel.blink(Color.brightCyan);
-    }
-}
-
-async function lightUpAllPixels(reason = undefined) {
-    if (window.pixels !== undefined) {
-        for (let i = 0; i < pixels.length; i++) {
-            await lightUpPixel(pixels[i], reason);
-        }
+    if (!containsObject(pixel.systemId, systemIds)) {
+        systemIds.push(pixel.systemId);
+        localStorage.setItem("pixelsSystemIds", JSON.stringify(systemIds));
     }
 }
 
@@ -1151,6 +1242,25 @@ function addPixelModeButton() {
                             "scope": scope
                         };
 
+                        if (nextAdvantageRoll && !dis && !crit) {
+                            currentlyExpectedRoll.advantage = true;
+                        }
+                        if (nextDisadvantageRoll && !adv && !crit) {
+                            currentlyExpectedRoll.disadvantage = true;
+                        }
+                        if (nextCriticalRoll && !adv && !dis) {
+                            currentlyExpectedRoll.critical = true;
+                        }
+                        if (nextEveryoneRoll) {
+                            setRollTarget("everyoneButton");
+                        }
+                        if (nextSelfRoll) {
+                            setRollTarget("selfButton");
+                        }
+                        if (nextDMRoll) {
+                            setRollTarget("dmButton");
+                        }
+
                         if (window.pixels !== undefined && pixels.length > 0) {
                             for (let i = 0; i < pixels.length; i++) {
                                 if (pixels[i].dieType === dieType) {
@@ -1212,7 +1322,7 @@ function addPixelsInfoBox() {
     let div = document.createElement("div");
     div.className = "pixels-info-box";
 
-    div.innerHTML = '<div class="pixels-info-box__content"> <div class="pixels-info-box__content__title">Pixel Info</div> <div class="pixels-info-box__content__text"> <p id="pixel-amount" class="no-pixel-warning">You currently have no pixel dice connected!</p> <p class="todo_text">You currently have nothing to do!</p> </div> <div class="pixels-info-box__content__buttons_target"> <button id="everyoneButton">Everyone</button> <button id="selfButton">Self</button> <button id="dmButton">DM</button> </div> <div class="pixels-info-box__content__buttons"> <button id="advButton">Adv.</button> <button id="critButton">Crit</button> <button id="disadvButton">Disadv.</button> </div> </div>';
+    div.innerHTML = '<div class="pixels-info-box__content"> <div class="pixels-info-box__content__title">Pixel Info</div> <div class="pixels-info-box__content__text"> <p id="pixel-amount" class="no-pixel-warning">You currently have no pixel dice connected!</p> <p class="todo_text">You currently have nothing to do!</p> </div> <div class="pixels-info-box__content__buttons_overview"> <button id="diceOverviewButton">Dice Overview</button> </div> <div class="pixels-info-box__content__buttons_target"> <button id="everyoneButton">Everyone</button> <button id="selfButton">Self</button> <button id="dmButton">DM</button> </div> <div class="pixels-info-box__content__buttons"> <button id="advButton">Adv.</button> <button id="critButton">Crit</button> <button id="disadvButton">Disadv.</button> </div> </div>';
     document.querySelector("body").appendChild(div);
 
     // add style to the info box (it should be on the left side of the page and be closed by default)
@@ -1224,13 +1334,16 @@ function addPixelsInfoBox() {
     GM_addStyle(`.pixels-info-box__content__text { position: absolute; top: 10%; left: 0%; width: 100%; height: 80%; font-size: 1em; text-align: center; color: white; overflow-y:auto; }`);
     GM_addStyle(`.pixels-info-box__content__buttons { position: absolute; top: 90%; left: 0%; width: 100%; height: 10%; }`);
     GM_addStyle(`.pixels-info-box__content__buttons_target { position: absolute; top: 75%; left: 0%; width: 100%; height: 10%; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons_overview { position: absolute; top: 60%; left: 0%; width: 100%; height: 10%; }`);
     GM_addStyle(`.pixels-info-box__content__buttons button, .pixels-info-box__content__buttons_target button { width: 30%; height: 100%; margin-left: 1%; background-color: darkgray; border: 2px solid; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons_overview button { width: 94%; height: 100%; margin-left: 1%; background-color: darkgray; border: 2px solid; }`);
     GM_addStyle(`.pixels-info-box__content__buttons #advButton { border-color: lime; }`);
     GM_addStyle(`.pixels-info-box__content__buttons #critButton { border-color: yellow; }`);
     GM_addStyle(`.pixels-info-box__content__buttons #disadvButton { border-color: red; }`);
     GM_addStyle(`.pixels-info-box__content__buttons_target #everyoneButton { border-color: white; }`);
     GM_addStyle(`.pixels-info-box__content__buttons_target #selfButton { border-color: white; }`);
     GM_addStyle(`.pixels-info-box__content__buttons_target #dmButton { border-color: white; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons_overview #diceOverviewButton { border-color: white; }`);
     GM_addStyle(`.no-pixel-warning { color: yellow; }`);
 
     document.querySelectorAll(".pixels-info-box__content__buttons button").forEach((element) => {
@@ -1244,6 +1357,16 @@ function addPixelsInfoBox() {
             setRollTarget(element.id);
         };
     });
+
+    document.querySelector("#diceOverviewButton").onclick = (e) => {
+        e.preventDefault();
+
+        if (document.querySelector(".dice-overview-box").style.display === "none") {
+            document.querySelector(".dice-overview-box").style.display = "block";
+        } else {
+            document.querySelector(".dice-overview-box").style.display = "none";
+        }
+    };
 
     // the box should be closed by default
     div.style.display = "none";
@@ -1266,6 +1389,156 @@ function addPixelsInfoBox() {
 
     // add style to the button
     GM_addStyle(`.pixels-info-box__button { position: fixed; top: 18px; left: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
+}
+
+function addDiceOverviewBox() {
+    let div = document.createElement("div");
+    div.className = "dice-overview-box";
+
+    // the box should have a title and a list of all dice that are currently connected
+    let innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
+
+    if (!!navigator?.bluetooth?.getDevices) {
+        innerHTML = innerHTML.replaceAll('AUTO_STATUS', '<span class="pixelsAutoReconnectStatus" style="color: lime">enabled</span>');
+    } else {
+        innerHTML = innerHTML.replaceAll('AUTO_STATUS', '<span class="pixelsAutoReconnectStatus" style="color: #ff3333">disabled</span>');
+    }
+    div.innerHTML = innerHTML;
+
+    document.querySelector("body").appendChild(div);
+
+    if (!(!!navigator?.bluetooth?.getDevices)) {
+        document.querySelector(".pixelsAutoReconnectStatus").onmouseover = (e) => {
+            e.preventDefault();
+            if (!tootltipShown) {
+                let topleft = getPageTopLeft(div.children[0].children[2].children[0]);
+                displayTooltip('To enable auto-reconnect, make sure you have the "Use the new permissions backend for Web Bluetooth" flag enabled. You can do so by opening "chrome://flags" in a new tab', parseInt(topleft.left), parseInt(topleft.top) - 80);
+
+                tootltipShown = true;
+            }
+        }
+
+        document.querySelector(".pixelsAutoReconnectStatus").onmouseout = (e) => {
+            e.preventDefault();
+            if (tootltipShown) {
+                document.querySelector(".tippy-popper--pixel-mode").remove();
+                tootltipShown = false;
+            }
+        }
+    }
+
+    // add style to the info box (it should be in the middle of the page and be closed by default)
+
+    GM_addStyle(`.dice-overview-box { position: fixed; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
+    GM_addStyle(`.dice-overview-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
+    GM_addStyle(`.dice-overview-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
+    GM_addStyle(`.dice-overview-box__content__features { position: absolute; top: 5%; left: 0%; width: 100%; height: 10%; font-size: 1em; text-align: center; color: white; }`);
+    GM_addStyle(`.dice-overview-box__content__table { position: absolute; top: 10%; left: 0%; width: 100%; height: 90%; }`);
+    GM_addStyle(`.dice-overview-box__content__table table { width: 100%; color: white; }`);
+    GM_addStyle(`.dice-overview-box__content__table table, th, td { border: 1px solid white; }`);
+    // make text in table centered
+    GM_addStyle(`.dice-overview-box__content__table table th, td { text-align: center; }`);
+    GM_addStyle(`.dice-overview-box__content__table table td a { color: white; }`);
+    GM_addStyle(`.dice-overview-box__content__table table td a:hover { cursor: pointer; color: yellow; }`);
+    //make the box movable
+    GM_addStyle(`.dice-overview-box { -webkit-app-region: drag; }`);
+
+
+    // the box should be closed by default
+    div.style.display = "none";
+
+    let button = document.querySelector("#closeDiceOverviewButton");
+    button.onclick = (e) => {
+        e.preventDefault();
+        // console.log("Dice overview box button clicked");
+
+        div.style.display = "none";
+    };
+
+    // add style to the button (it should be in the top right corner of the box)
+    GM_addStyle(`.dice-overview-box__button { position: absolute; top: 0%; right: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; color: white; z-index: 999`);
+}
+
+function addDieToTable(pixel) {
+    let table = document.querySelector("#diceTable");
+    let newRow = undefined;
+    let onlyUpdate = false;
+
+    // insert a new cell for each column in the row
+    let typeCell = undefined;
+    let nameCell = undefined;
+    let connectionStatusCell = undefined;
+    let rollStatusCell = undefined;
+    let batteryCell = undefined;
+    let faceCell = undefined;
+    let actionCell = undefined;
+
+    // check if a row for this pixel already exists
+    if (document.getElementById("pixel" + pixel.pixelId) === null) {
+        newRow = table.insertRow(-1);
+
+        // insert a new cell for each column in the row
+        typeCell = newRow.insertCell(0);
+        nameCell = newRow.insertCell(1);
+        connectionStatusCell = newRow.insertCell(2);
+        rollStatusCell = newRow.insertCell(3);
+        batteryCell = newRow.insertCell(4);
+        faceCell = newRow.insertCell(5);
+        actionCell = newRow.insertCell(6);
+    } else {
+        newRow = document.getElementById("pixel" + pixel.pixelId);
+        onlyUpdate = true;
+
+        typeCell = newRow.children[0];
+        nameCell = newRow.children[1];
+        connectionStatusCell = newRow.children[2];
+        rollStatusCell = newRow.children[3];
+        batteryCell = newRow.children[4];
+        faceCell = newRow.children[5];
+        actionCell = newRow.children[6];
+    }
+
+    if (!onlyUpdate) {
+        newRow.id = "pixel" + pixel.pixelId;
+        actionCell.innerHTML = '<a id="pixel' + pixel.pixelId + 'LightUp">Light up</a> | <a id="pixel' + pixel.pixelId + 'Disconnect">Disconnect</a>';
+
+        document.querySelector("#pixel" + pixel.pixelId + "LightUp").addEventListener('click', function (e) {
+            e.preventDefault();
+            console.log("Light up button clicked");
+
+            lightUpPixel(pixel, "quickLightUp");
+        });
+
+        document.querySelector("#pixel" + pixel.pixelId + "Disconnect").addEventListener('click', function (e) {
+            e.preventDefault();
+            console.log("Disconnect button clicked");
+
+            pixel.manualDisconnect = true;
+            pixel.disconnect();
+            let systemIds = JSON.parse(localStorage.getItem("pixelsSystemIds"));
+            if (systemIds !== null) {
+                systemIds = systemIds.filter(e => e !== pixel.systemId);
+                localStorage.setItem("pixelsSystemIds", JSON.stringify(systemIds));
+            }
+            updateCurrentPixels();
+        });
+    }
+
+    // add the data to the cells
+    typeCell.innerHTML = pixel.dieType;
+    nameCell.innerHTML = pixel.name;
+    connectionStatusCell.innerHTML = pixel.status;
+    rollStatusCell.innerHTML = pixel.rollState;
+    batteryCell.innerHTML = pixel.batteryLevel + "%";
+    faceCell.innerHTML = pixel.currentFace;
+
+    if (!pixel.manualDisconnect) {
+        setTimeout(() => {
+            addDieToTable(pixel);
+        }, 300);
+    } else {
+        newRow.remove();
+    }
 }
 
 function displayWhatUserNeedsToDo(text = undefined) {
@@ -1299,8 +1572,9 @@ function updateCurrentPixels() {
 
         text += "<br><br>";
         for (const [key, value] of Object.entries(diceTypes)) {
-            text += value + "x " + key + "<br>";
+            text += value + "x " + key + ", ";
         }
+        text = text.substring(0, text.length - 2);
     }
     document.querySelector("#pixel-amount").innerHTML = text;
 }
@@ -1508,7 +1782,7 @@ function checkForOpenGameLog() {
 
 function setRollType(type) {
     if (Object.keys(currentlyExpectedRoll).length !== 0) {
-        if (type === "advButton" || type === "advantage") {
+        if (type === "advButton" || type === "advantage" || nextAdvantageRoll) {
             currentlyExpectedRoll.advantage = !currentlyExpectedRoll.advantage;
             currentlyExpectedRoll.disadvantage = false;
             currentlyExpectedRoll.critical = false;
@@ -1519,7 +1793,7 @@ function setRollType(type) {
             } else {
                 document.querySelector("#advButton").style.backgroundColor = "darkgray";
             }
-        } else if (type === "critButton" || type === "critical") {
+        } else if (type === "critButton" || type === "critical" || nextCriticalRoll) {
             currentlyExpectedRoll.critical = !currentlyExpectedRoll.critical;
             currentlyExpectedRoll.advantage = false;
             currentlyExpectedRoll.disadvantage = false;
@@ -1530,7 +1804,7 @@ function setRollType(type) {
             } else {
                 document.querySelector("#critButton").style.backgroundColor = "darkgray";
             }
-        } else if (type === "disadvButton" || type === "disadvantage") {
+        } else if (type === "disadvButton" || type === "disadvantage" || nextDisadvantageRoll) {
             currentlyExpectedRoll.disadvantage = !currentlyExpectedRoll.disadvantage;
             currentlyExpectedRoll.advantage = false;
             currentlyExpectedRoll.critical = false;
@@ -1549,29 +1823,89 @@ function setRollType(type) {
             document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
             document.querySelector("#critButton").style.backgroundColor = "darkgray";
         }
+    } else {
+        if (type === "advButton" || type === "advantage") {
+            document.querySelector("#advButton").style.backgroundColor = "lime";
+            document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+            document.querySelector("#critButton").style.backgroundColor = "darkgray";
+
+            nextAdvantageRoll = true;
+            nextDisadvantageRoll = false;
+            nextCriticalRoll = false;
+        } else if (type === "critButton" || type === "critical") {
+            document.querySelector("#critButton").style.backgroundColor = "yellow";
+            document.querySelector("#advButton").style.backgroundColor = "darkgray";
+            document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+
+            nextAdvantageRoll = false;
+            nextDisadvantageRoll = false;
+            nextCriticalRoll = true;
+        } else if (type === "disadvButton" || type === "disadvantage") {
+            document.querySelector("#disadvButton").style.backgroundColor = "red";
+            document.querySelector("#advButton").style.backgroundColor = "darkgray";
+            document.querySelector("#critButton").style.backgroundColor = "darkgray";
+
+            nextAdvantageRoll = false;
+            nextDisadvantageRoll = true;
+            nextCriticalRoll = false;
+        } else if (type === "normal") {
+            document.querySelector("#advButton").style.backgroundColor = "darkgray";
+            document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+            document.querySelector("#critButton").style.backgroundColor = "darkgray";
+
+            nextAdvantageRoll = false;
+            nextDisadvantageRoll = false;
+            nextCriticalRoll = false;
+        }
     }
 }
 
 function setRollTarget(type) {
     if (Object.keys(currentlyExpectedRoll).length !== 0) {
-        if (type === "everyoneButton") {
+        if (type === "everyoneButton" || nextEveryoneRoll) {
             currentlyExpectedRoll.target = getGameId();
             currentlyExpectedRoll.scope = "gameId";
             document.querySelector("#everyoneButton").style.backgroundColor = "white";
             document.querySelector("#selfButton").style.backgroundColor = "darkgray";
             document.querySelector("#dmButton").style.backgroundColor = "darkgray";
-        } else if (type === "selfButton") {
+        } else if (type === "selfButton" || nextSelfRoll) {
             currentlyExpectedRoll.target = getUserId();
             currentlyExpectedRoll.scope = "userId";
             document.querySelector("#selfButton").style.backgroundColor = "white";
             document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
             document.querySelector("#dmButton").style.backgroundColor = "darkgray";
-        } else if (type === "dmButton") {
+        } else if (type === "dmButton" || nextDMRoll) {
             currentlyExpectedRoll.target = characterData.data.dmId;
             currentlyExpectedRoll.scope = "userId";
             document.querySelector("#dmButton").style.backgroundColor = "white";
             document.querySelector("#selfButton").style.backgroundColor = "darkgray";
             document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
+        }
+    } else {
+        if (type === "everyoneButton") {
+            document.querySelector("#everyoneButton").style.backgroundColor = "white";
+            document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+            document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+
+            nextEveryoneRoll = true;
+            nextSelfRoll = false;
+            nextDMRoll = false;
+        } else if (type === "selfButton") {
+            document.querySelector("#selfButton").style.backgroundColor = "white";
+            document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
+            document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+
+            nextEveryoneRoll = false;
+            nextSelfRoll = true;
+            nextDMRoll = false;
+        } else if (type === "dmButton") {
+            document.querySelector("#dmButton").style.backgroundColor = "white";
+            document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+            document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
+
+            nextEveryoneRoll = false;
+            nextSelfRoll = false;
+            nextDMRoll = true;
         }
     }
 }
@@ -1624,12 +1958,15 @@ function determineRollType(rollButton) {
                     if (element.children[1].innerHTML.includes("Every")) {
                         target = getGameId();
                         scope = "gameId";
+                        setRollTarget("everyoneButton");
                     } else if (element.children[1].innerHTML.includes("Self")) {
                         target = getUserId();
                         scope = "userId";
+                        setRollTarget("selfButton");
                     } else if (element.children[1].innerHTML.includes("Master")) {
                         target = characterData.data.dmId;
                         scope = "userId";
+                        setRollTarget("dmButton");
                     }
                 }
             };
@@ -1869,4 +2206,27 @@ function containsObject(obj, list) {
     }
 
     return false;
+}
+
+function detectOS() {
+    let userAgent = window.navigator.userAgent,
+        platform = window.navigator.platform,
+        macosPlatforms = ['Macintosh', 'MacIntel', 'MacPPC', 'Mac68K'],
+        windowsPlatforms = ['Win32', 'Win64', 'Windows', 'WinCE'],
+        iosPlatforms = ['iPhone', 'iPad', 'iPod'],
+        os = null;
+
+    if (macosPlatforms.indexOf(platform) !== -1) {
+        os = 'Mac OS';
+    } else if (iosPlatforms.indexOf(platform) !== -1) {
+        os = 'iOS';
+    } else if (windowsPlatforms.indexOf(platform) !== -1) {
+        os = 'Windows';
+    } else if (/Android/.test(userAgent)) {
+        os = 'Android';
+    } else if (!os && /Linux/.test(platform)) {
+        os = 'Linux';
+    }
+
+    return os;
 }
