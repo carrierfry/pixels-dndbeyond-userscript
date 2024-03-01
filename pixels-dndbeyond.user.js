@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.7.3
+// @version      0.8
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -10,7 +10,7 @@
 // @grant        none
 // @updateURL    https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js
 // @downloadURL  https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js
-// @require      https://unpkg.com/@systemic-games/pixels-web-connect@1.1.1/dist/umd/index.js
+// @require      https://unpkg.com/@systemic-games/pixels-web-connect@1.2.0/dist/umd/index.js
 // ==/UserScript==
 
 const { repeatConnect, requestPixel, getPixel, Color } = pixelsWebConnect;
@@ -289,6 +289,8 @@ let gameLogEntries = [];
 let lastHealth = -1;
 let currentlyObserving = false;
 let socketRetryCount = 0;
+let d100RollHappening = false;
+let d100RollParts = [];
 
 let nextAdvantageRoll = false;
 let nextDisadvantageRoll = false;
@@ -1010,76 +1012,91 @@ function rollDice(dieType, value) {
 
     if (multiRollComplete || Object.keys(currentlyExpectedRoll).length === 0 || currentlyExpectedRoll.amount === 1) {
         let initJson;
-        if (Object.keys(currentlyExpectedRoll).length > 0) {
-            initJson = buildInitialJson(dieType, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName, currentlyExpectedRoll.target, currentlyExpectedRoll.scope);
+        if (d100RollHappening && d100RollParts.length === 0) {
+            d100RollParts.push(value);
+            console.log("waiting for second d100 roll part");
+        } else if (d100RollHappening && d100RollParts.length === 1) {
+            d100RollParts.push(value);
+            let d100Value = d100RollParts[0] + d100RollParts[1];
+            if (d100Value === 0) {
+                d100Value = 100;
+            }
+            initJson = buildInitialJson("d100", modifier, d100Value);
         } else {
-            initJson = buildInitialJson(dieType, modifier, amount);
-        }
+            if (Object.keys(currentlyExpectedRoll).length > 0) {
+                initJson = buildInitialJson(dieType, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName, currentlyExpectedRoll.target, currentlyExpectedRoll.scope);
+            } else {
+                initJson = buildInitialJson(dieType, modifier, amount);
+            }
 
-        if (socket && socket.readyState === 1) {
-            socket.send(JSON.stringify(initJson));
-        }
+            if (socket && socket.readyState === 1) {
+                socket.send(JSON.stringify(initJson));
+            }
 
-        let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
+            let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
 
-        let rolledJson;
-        if (Object.keys(currentlyExpectedRoll).length > 0) {
-            rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName, currentlyExpectedRoll.target, currentlyExpectedRoll.scope);
-        } else {
-            rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount);
-        }
+            let rolledJson;
+            if (Object.keys(currentlyExpectedRoll).length > 0) {
+                rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName, currentlyExpectedRoll.target, currentlyExpectedRoll.scope);
+            } else {
+                rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount);
+            }
 
-        if (socket && socket.readyState === 1) {
-            setTimeout(() => {
-                // console.log("sending value: " + dieValue);
-                socket.send(JSON.stringify(rolledJson));
-            }, 1000);
-        }
+            if (socket && socket.readyState === 1) {
+                setTimeout(() => {
+                    // console.log("sending value: " + dieValue);
+                    socket.send(JSON.stringify(rolledJson));
+                }, 1000);
+            }
 
-        if (Object.keys(currentlyExpectedRoll).length > 0 && (currentlyExpectedRoll.advantage || currentlyExpectedRoll.disadvantage)) {
-            if (currentlyExpectedRoll.advantage && last2D20Rolls.length === 2 && (last2D20Rolls[0] === 20 || last2D20Rolls[1] === 20)) {
-                nextDmgRollIsCrit = true;
-            } else if (currentlyExpectedRoll.disadvantage && last2D20Rolls.length === 2 && (last2D20Rolls[0] === 1 && last2D20Rolls[1] === 1)) {
+            if (Object.keys(currentlyExpectedRoll).length > 0 && (currentlyExpectedRoll.advantage || currentlyExpectedRoll.disadvantage)) {
+                if (currentlyExpectedRoll.advantage && last2D20Rolls.length === 2 && (last2D20Rolls[0] === 20 || last2D20Rolls[1] === 20)) {
+                    nextDmgRollIsCrit = true;
+                } else if (currentlyExpectedRoll.disadvantage && last2D20Rolls.length === 2 && (last2D20Rolls[0] === 1 && last2D20Rolls[1] === 1)) {
+                    nextDmgRollIsCrit = true;
+                }
+            } else if (Object.keys(currentlyExpectedRoll).length > 0 && last2D20Rolls[last2D20Rolls.length - 1] === 20 && dieType === "d20") {
                 nextDmgRollIsCrit = true;
             }
-        } else if (Object.keys(currentlyExpectedRoll).length > 0 && last2D20Rolls[last2D20Rolls.length - 1] === 20 && dieType === "d20") {
-            nextDmgRollIsCrit = true;
+
+            createToast(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], modifier, rolledJson.data.rolls[0].diceNotationStr);
+            // displayDieRoll(dieType, value, modifier);
+            // appendElementToGameLog(rolledJson);
+            rolledJsonArray.push(rolledJson);
+            currentlyExpectedRoll = {};
+
+            if (pixelModeOnlyOnce && pixelMode) {
+                pixelMode = false;
+                document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+                document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
+                    element.parentNode.replaceChild(originalDiceClick[index], element);
+                });
+                originalDiceClick = [];
+                pixelModeOnlyOnce = false;
+            }
+
+            if (multiRollComplete) {
+                multiRolls = [];
+            }
+            doubledAmount = false;
+
+            document.querySelector("#advButton").style.backgroundColor = "darkgray";
+            document.querySelector("#critButton").style.backgroundColor = "darkgray";
+            document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+            document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
+            document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+            document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+
+            nextAdvantageRoll = false;
+            nextDisadvantageRoll = false;
+            nextCriticalRoll = false;
+            nextEveryoneRoll = false;
+            nextSelfRoll = false;
+            nextDMRoll = false;
+
+            d100RollHappening = false;
+            d100RollParts = [];
         }
-
-        createToast(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], modifier, rolledJson.data.rolls[0].diceNotationStr);
-        // displayDieRoll(dieType, value, modifier);
-        // appendElementToGameLog(rolledJson);
-        rolledJsonArray.push(rolledJson);
-        currentlyExpectedRoll = {};
-
-        if (pixelModeOnlyOnce && pixelMode) {
-            pixelMode = false;
-            document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
-            document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
-                element.parentNode.replaceChild(originalDiceClick[index], element);
-            });
-            originalDiceClick = [];
-            pixelModeOnlyOnce = false;
-        }
-
-        if (multiRollComplete) {
-            multiRolls = [];
-        }
-        doubledAmount = false;
-
-        document.querySelector("#advButton").style.backgroundColor = "darkgray";
-        document.querySelector("#critButton").style.backgroundColor = "darkgray";
-        document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
-        document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
-        document.querySelector("#selfButton").style.backgroundColor = "darkgray";
-        document.querySelector("#dmButton").style.backgroundColor = "darkgray";
-
-        nextAdvantageRoll = false;
-        nextDisadvantageRoll = false;
-        nextCriticalRoll = false;
-        nextEveryoneRoll = false;
-        nextSelfRoll = false;
-        nextDMRoll = false;
     } else {
         console.log("waiting for more rolls");
     }
@@ -1095,7 +1112,7 @@ async function requestMyPixel() {
 
 async function lightUpPixel(pixel, reason = undefined) {
     if (reason === "waitingForRoll") {
-        await pixel.blink(Color.dimYellow, { count: 3, duration: 3000, fade: 0.3 });
+        await pixel.blink(Color.dimYellow, { count: 3, duration: 2000, fade: 0.3 });
     } else if (reason === "connected") {
         await pixel.blink(Color.dimGreen, { count: 1, duration: 1500, fade: 0.8 });
     } else if (reason === "damage") {
@@ -1175,6 +1192,17 @@ async function handleConnection(pixel) {
                         console.log("Reconnecting...");
                         repeatConnect(pixel);
                     }, 1000);
+                }
+            }
+            if (pixel.dieType === "d10" || pixel.dieType === "d00") {
+                if (status === "rolling") {
+                    // check if the other die (d10 or d00) is also rolling
+                    for (let i = 0; i < window.pixels.length; i++) {
+                        if ((pixel.dieType === "d00" && window.pixels[i].dieType === "d10" && window.pixels[i].status === "rolling")
+                            || (pixel.dieType === "d10" && window.pixels[i].dieType === "d00" && window.pixels[i].status === "rolling")) {
+                            d100RollHappening = true;
+                        }
+                    }
                 }
             }
             if (status === "ready") {
