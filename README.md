@@ -52,15 +52,15 @@ Pixel Mode is not available when using [Beyond20](https://beyond20.here-for-more
 - [x] ~~Test if it works with pixel dice actually, since I don't have any right now~~
 - [x] ~~Make it possible to automatically add the modifiers to the roll (e.g. +5 for a strength check)~~
 - [x] ~~Make it possible to roll multiple dice at once (e.g. `2d6+4`)~~
-- [ ] d100 rolls with a d10 and a d00
+- [x] ~~d100 rolls with a d10 and a d00~~
 - [x] ~~Show the roll to the user as a toast/popup~~
 - [x] ~~Show the roll in the game log to the user itself (currently only the other players who are in the session can see it live)~~
 
 ## Known bugs
 - Currently, the script only works if you open the character sheet in DnD Beyond directly (for example by reloading the page). If you open the character sheet by clicking on `view` in your campaign or character overwie, it won't work. (If you are using the chrome web store version, it will work in both cases)
 - If you are connected to your pixel dice and reload the page, you have to reconnect to your pixel dice again. (It shows that the dice is already connected, but it doesn't work until you reconnect.)
-- d100 rolls are not supported currently (as you need to roll 2 d10s for that). Instead you have to roll 2 d10s separately and add them together in your head.
 - Healing spells can only be rolled with pixel by using the pixel mode. Other spells can also be rolled with pixel by using `right click -> roll with pixel` on the damage button.
 
 ## Software used
 [Pixels Web Connect](https://github.com/GameWithPixels/pixels-js/tree/main/packages/pixels-web-connect) (via [unpkg](https://unpkg.com/))
+[Pixels Edit Animation](https://github.com/GameWithPixels/pixels-js/tree/main/packages/pixels-edit-animation) (via [unpkg](https://unpkg.com/))
