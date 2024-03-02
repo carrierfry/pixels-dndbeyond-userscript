@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.1
+// @version      0.8.1.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -334,6 +334,8 @@ function interceptSocket() {
             interceptSocket();
         });
 
+        checkForOtherPeoplesRolls();
+
         window.WebSocket = nativeWebSocket;
 
         return socketTmp;
@@ -377,7 +379,6 @@ function main() {
             addPixelsInfoBox();
             addDiceOverviewBox();
             checkForAutoConnect();
-            checkForOtherPeoplesRolls();
             setInterval(checkForOpenGameLog, 500);
             setInterval(checkForMissingPixelButtons, 1000);
             setInterval(checkForContextMenu, 300);
@@ -2155,7 +2156,7 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
 }
 
 function checkForOtherPeoplesRolls() {
-    if (socket !== undefined && socket.readyState === 1) {
+    if (socket !== undefined) {
         socket.addEventListener('message', function (event) {
             let json = JSON.parse(event.data);
             if (json.eventType === "dice/roll/fulfilled") {
