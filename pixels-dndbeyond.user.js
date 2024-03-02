@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.1.2
+// @version      0.8.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -293,6 +293,7 @@ let currentlyObserving = false;
 let socketRetryCount = 0;
 let d100RollHappening = false;
 let d100RollParts = [];
+let specialLighting = false;
 
 let nextAdvantageRoll = false;
 let nextDisadvantageRoll = false;
@@ -379,6 +380,7 @@ function main() {
             addPixelsInfoBox();
             addDiceOverviewBox();
             checkForAutoConnect();
+            loadLocalStorage();
             setInterval(checkForOpenGameLog, 500);
             setInterval(checkForMissingPixelButtons, 1000);
             setInterval(checkForContextMenu, 300);
@@ -400,6 +402,13 @@ function main() {
             }
         }
     });
+}
+
+function loadLocalStorage() {
+    if (localStorage.getItem("lightingCheckbox") !== null) {
+        specialLighting = localStorage.getItem("lightingCheckbox") === "true";
+        document.getElementById("diceOption").checked = specialLighting;
+    }
 }
 
 function checkIfBeyond20Installed() {
@@ -1134,7 +1143,7 @@ async function lightUpPixel(pixel, reason = undefined) {
     } else if (reason === "quickLightUp") {
         await pixel.blink(Color.dimMagenta, { count: 3, duration: 1000, fade: 0.8 });
     } else if (reason === "nat1") {
-        await pixel.blink(Color.dimRed, { count: 1, duration: 3000, fade: 0 });
+        await pixel.blink(Color.dimRed, { count: 1, duration: 3000, fade: 1 });
     } else if (reason === "nat20") {
         await rainbowPixel(pixel);
     } else if (reason === "none") {
@@ -1472,7 +1481,7 @@ function addDiceOverviewBox() {
     div.className = "dice-overview-box";
 
     // the box should have a title and a list of all dice that are currently connected
-    let innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
+    let innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div> <div class="dice-overview-box__content__settings"> <input type="checkbox" id="diceOption" name="diceOption"><label for="diceOption"> Light up dice when other characters score a natural 1 or 20</label> </div> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
 
     if (!!navigator?.bluetooth?.getDevices) {
         innerHTML = innerHTML.replaceAll('AUTO_STATUS', '<span class="pixelsAutoReconnectStatus" style="color: lime">enabled</span>');
@@ -1509,7 +1518,8 @@ function addDiceOverviewBox() {
     GM_addStyle(`.dice-overview-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
     GM_addStyle(`.dice-overview-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__features { position: absolute; top: 5%; left: 0%; width: 100%; height: 10%; font-size: 1em; text-align: center; color: white; }`);
-    GM_addStyle(`.dice-overview-box__content__table { position: absolute; top: 10%; left: 0%; width: 100%; height: 90%; }`);
+    GM_addStyle(`.dice-overview-box__content__settings { position: absolute; top: 10%; left: 0%; width: 100%; height: 10%; font-size: 1em; text-align: left; color: white; }`);
+    GM_addStyle(`.dice-overview-box__content__table { position: absolute; top: 15%; left: 0%; width: 100%; height: 90%; }`);
     GM_addStyle(`.dice-overview-box__content__table table { width: 100%; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__table table, th, td { border: 1px solid white; }`);
     // make text in table centered
@@ -1529,6 +1539,12 @@ function addDiceOverviewBox() {
         // console.log("Dice overview box button clicked");
 
         div.style.display = "none";
+    };
+
+    let lightingCheckbox = document.querySelector("#diceOption");
+    lightingCheckbox.onclick = (e) => {
+        specialLighting = lightingCheckbox.checked;
+        localStorage.setItem("lightingCheckbox", specialLighting);
     };
 
     // add style to the button (it should be in the top right corner of the box)
@@ -2187,7 +2203,9 @@ function checkForOtherPeoplesRolls() {
                         lightingType = "nat1";
                     }
 
-                    lightUpAllPixels(lightingType);
+                    if (specialLighting) {
+                        lightUpAllPixels(lightingType);
+                    }
                 }
             }
         });
