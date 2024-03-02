@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8
+// @version      0.8.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -11,9 +11,11 @@
 // @updateURL    https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js
 // @downloadURL  https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js
 // @require      https://unpkg.com/@systemic-games/pixels-web-connect@1.2.0/dist/umd/index.js
+// @require      https://unpkg.com/@systemic-games/pixels-edit-animation@1.2.0/dist/umd/index.js
 // ==/UserScript==
 
 const { repeatConnect, requestPixel, getPixel, Color } = pixelsWebConnect;
+const { createDataSetForAnimation, EditAnimationRainbow } = pixelsEditAnimation;
 
 const diceTypes = {
     "d4": {
@@ -322,14 +324,22 @@ const observer = new MutationObserver(callback);
 // Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
 const nativeWebSocket = window.WebSocket;
-window.WebSocket = function (...args) {
-    const socketTmp = new nativeWebSocket(...args);
-    socket = socketTmp;
+function interceptSocket() {
+    window.WebSocket = function (...args) {
+        console.log("Intercepting socket");
+        const socketTmp = new nativeWebSocket(...args);
+        socket = socketTmp;
 
-    // window.WebSocket = nativeWebSocket;
+        socket.addEventListener("close", (event) => {
+            interceptSocket();
+        });
 
-    return socketTmp;
-};
+        window.WebSocket = nativeWebSocket;
+
+        return socketTmp;
+    };
+}
+interceptSocket();
 
 
 setTimeout(main, 500);
@@ -367,6 +377,7 @@ function main() {
             addPixelsInfoBox();
             addDiceOverviewBox();
             checkForAutoConnect();
+            checkForOtherPeoplesRolls();
             setInterval(checkForOpenGameLog, 500);
             setInterval(checkForMissingPixelButtons, 1000);
             setInterval(checkForContextMenu, 300);
@@ -527,7 +538,7 @@ function addRollWithPixelButton(contextMenu) {
 
             if (window.pixels !== undefined && pixels.length > 0) {
                 for (let i = 0; i < pixels.length; i++) {
-                    if (pixels[i].dieType === dieType) {
+                    if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
                         lightUpPixel(pixels[i], "waitingForRoll");
                     }
                 }
@@ -653,7 +664,7 @@ function handleMouseLeave(e) {
 
                 if (window.pixels !== undefined && pixels.length > 0) {
                     for (let i = 0; i < pixels.length; i++) {
-                        if (pixels[i].dieType === dieType) {
+                        if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
                             lightUpPixel(pixels[i], "waitingForRoll");
                         }
                     }
@@ -1121,6 +1132,12 @@ async function lightUpPixel(pixel, reason = undefined) {
         await pixel.blink(Color.dimGreen, { count: 2, duration: 3000, fade: 1 });
     } else if (reason === "quickLightUp") {
         await pixel.blink(Color.dimMagenta, { count: 3, duration: 1000, fade: 0.8 });
+    } else if (reason === "nat1") {
+        await pixel.blink(Color.dimRed, { count: 1, duration: 3000, fade: 0 });
+    } else if (reason === "nat20") {
+        await rainbowPixel(pixel);
+    } else if (reason === "none") {
+        // DO NOTHING
     } else {
         await pixel.blink(Color.brightCyan);
     }
@@ -1132,6 +1149,21 @@ async function lightUpAllPixels(reason = undefined) {
             await lightUpPixel(pixels[i], reason);
         }
     }
+}
+
+async function rainbowPixel(pixel) {
+    // Create a simple rainbow animation
+    const editDataSet = createDataSetForAnimation(
+        new EditAnimationRainbow({
+            duration: 3,
+            count: 2,
+            fade: 0.5,
+            intensity: 0.3
+        })
+    );
+
+    // And play it on the Pixel die
+    await pixel.playTestAnimation(editDataSet.toDataSet());
 }
 
 async function checkForAutoConnect() {
@@ -1306,7 +1338,7 @@ function addPixelModeButton() {
 
                         if (window.pixels !== undefined && pixels.length > 0) {
                             for (let i = 0; i < pixels.length; i++) {
-                                if (pixels[i].dieType === dieType) {
+                                if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
                                     lightUpPixel(pixels[i], "waitingForRoll");
                                 }
                             }
@@ -2120,6 +2152,42 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
     setTimeout(() => {
         div.remove();
     }, 8000);
+}
+
+function checkForOtherPeoplesRolls() {
+    if (socket !== undefined && socket.readyState === 1) {
+        socket.addEventListener('message', function (event) {
+            let json = JSON.parse(event.data);
+            if (json.eventType === "dice/roll/fulfilled") {
+                console.log(json);
+
+                if (json.data.rolls[0].diceNotationStr.includes("d20")) {
+                    let rollBaseValue = -1;
+                    // is roll a single d20
+                    if (json.data.rolls[0].result.values.length === 1) {
+                        rollBaseValue = json.data.rolls[0].result.values[0];
+                    } else {
+                        // is roll advantage or disadvantage
+                        if (json.data.rolls[0].rollKind === "advantage") {
+                            rollBaseValue = Math.max(json.data.rolls[0].result.values[0], json.data.rolls[0].result.values[1]);
+                        } else if (json.data.rolls[0].rollKind === "disadvantage") {
+                            rollBaseValue = Math.min(json.data.rolls[0].result.values[0], json.data.rolls[0].result.values[1]);
+                        }
+                    }
+
+                    // is roll nat20 or nat1
+                    let lightingType = "none";
+                    if (rollBaseValue === 20) {
+                        lightingType = "nat20";
+                    } else if (rollBaseValue === 1) {
+                        lightingType = "nat1";
+                    }
+
+                    lightUpAllPixels(lightingType);
+                }
+            }
+        });
+    }
 }
 
 window.appendElementToGameLog = function (json) {
