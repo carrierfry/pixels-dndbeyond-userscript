@@ -305,14 +305,21 @@ const observer = new MutationObserver(callback);
 // Intercept the WebSocket constructor so we can get the socket object
 let socket = null;
 const nativeWebSocket = window.WebSocket;
-window.WebSocket = function (...args) {
-    const socketTmp = new nativeWebSocket(...args);
-    socket = socketTmp;
+function interceptSocket() {
+    window.WebSocket = function (...args) {
+        const socketTmp = new nativeWebSocket(...args);
+        socket = socketTmp;
 
-    // window.WebSocket = nativeWebSocket;
+        socket.addEventListener("close", (event) => {
+            interceptSocket();
+        });
 
-    return socketTmp;
-};
+        window.WebSocket = nativeWebSocket;
+
+        return socketTmp;
+    };
+}
+interceptSocket();
 
 
 setTimeout(main, 500);
