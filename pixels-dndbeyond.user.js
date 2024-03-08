@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.2.1
+// @version      0.8.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -303,6 +303,12 @@ let nextEveryoneRoll = false;
 let nextSelfRoll = false;
 let nextDMRoll = false;
 
+let useCustomDebouncing = false;
+let debounceTimeStart = -1;
+let debounceTimeEnd = -1;
+let debounceThreshold = 1000;
+let currentlyRollingOrHandling = false;
+
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
         for (const addedNode of mutation.addedNodes) {
@@ -414,6 +420,11 @@ function loadLocalStorage() {
     if (localStorage.getItem("beyond20Checkbox") !== null) {
         beyond20CustomRollNoSend = localStorage.getItem("beyond20Checkbox") === "true";
         document.getElementById("beyond20CustomRolls").checked = beyond20CustomRollNoSend;
+    }
+
+    if (localStorage.getItem("useCustomDebouncer") !== null) {
+        useCustomDebouncing = localStorage.getItem("useCustomDebouncer") === "true";
+        document.getElementById("useCustomDebouncer").checked = useCustomDebouncing;
     }
 }
 
@@ -1221,8 +1232,18 @@ async function handleConnection(pixel) {
     if (!containsObject(pixel, window.pixels)) {
 
         pixel.addEventListener("roll", (face) => {
-            console.log(`=> rolled face: ${face}`);
+            // console.log(`=> rolled face: ${face}`);
 
+            if (useCustomDebouncing && debounceTimeStart !== -1) {
+                if (debounceTimeEnd - debounceTimeStart < debounceThreshold) {
+                    // console.log((debounceTimeEnd - debounceTimeStart));
+                    // console.log("Roll too fast, ignoring...");
+                    return;
+                }
+            }
+
+            debounceTimeStart = -1;
+            debounceTimeEnd = -1;
             // For now only D20, other dice in the future when I have my own dice and can explore the data structures :(
             if (pixel.dieType === "d6pipped") {
                 rollDice("d6", face);
@@ -1231,19 +1252,12 @@ async function handleConnection(pixel) {
             }
         });
 
-        pixel.addEventListener("status", (status) => {
-            console.log(`=> status: ${status}`);
+        pixel.addEventListener("rollState", (state) => {
+            // console.log(`=> rollState: ${state}`);
+            // console.log(state);
 
-            if (pixel.manualDisconnect === false) {
-                if (status === "disconnected") {
-                    setTimeout(() => {
-                        console.log("Reconnecting...");
-                        repeatConnect(pixel);
-                    }, 1000);
-                }
-            }
             if (pixel.dieType === "d10" || pixel.dieType === "d00") {
-                if (status === "rolling") {
+                if (state.state === "rolling") {
                     // check if the other die (d10 or d00) is also rolling
                     for (let i = 0; i < window.pixels.length; i++) {
                         if ((pixel.dieType === "d00" && window.pixels[i].dieType === "d10" && window.pixels[i].status === "rolling")
@@ -1253,6 +1267,33 @@ async function handleConnection(pixel) {
                     }
                 }
             }
+
+            if (useCustomDebouncing) {
+                if ((state.state === "rolling" || state.state === "handling") && !currentlyRollingOrHandling) {
+                    debounceTimeStart = Date.now();
+                    currentlyRollingOrHandling = true;
+                } else if (!currentlyRollingOrHandling && state.state === "onFace") {
+                    debounceTimeStart = Date.now();
+                    debounceTimeEnd = Date.now();
+                } else if (state.state === "onFace") {
+                    debounceTimeEnd = Date.now();
+                    currentlyRollingOrHandling = false;
+                }
+            }
+        });
+
+        pixel.addEventListener("status", (status) => {
+            // console.log(`=> status: ${status}`);
+
+            if (pixel.manualDisconnect === false) {
+                if (status === "disconnected") {
+                    setTimeout(() => {
+                        console.log("Reconnecting...");
+                        repeatConnect(pixel);
+                    }, 1000);
+                }
+            }
+
             if (status === "ready") {
                 pixel.manualDisconnect = false;
                 lightUpPixel(pixel, "connected");
@@ -1487,7 +1528,7 @@ function addDiceOverviewBox() {
     div.className = "dice-overview-box";
 
     // the box should have a title and a list of all dice that are currently connected
-    let innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div> <div class="dice-overview-box__content__settings"> <input type="checkbox" id="diceOption" name="diceOption"><label for="diceOption"> Light up dice when other characters score a natural 1 or 20</label><br> <input type="checkbox" id="beyond20CustomRolls" name="beyond20CustomRolls"><label for="beyond20CustomRolls"> Do not send custom rolls to Roll20 (only relevant when Beyond20 is installed)</label> </div> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
+    let innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div> <div class="dice-overview-box__content__settings"> <input type="checkbox" id="diceOption" name="diceOption"><label for="diceOption"> Light up dice when other characters score a natural 1 or 20</label><br> <input type="checkbox" id="beyond20CustomRolls" name="beyond20CustomRolls"><label for="beyond20CustomRolls"> Do not send custom rolls to Roll20 (only relevant when Beyond20 is installed)</label><br> <input type="checkbox" id="useCustomDebouncer" name="useCustomDebouncer"><label for="useCustomDebouncer"> EXPERIMENTAL: Make false positives when rolling less likely</label> </div> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
 
     if (!!navigator?.bluetooth?.getDevices) {
         innerHTML = innerHTML.replaceAll('AUTO_STATUS', '<span class="pixelsAutoReconnectStatus" style="color: lime">enabled</span>');
@@ -1525,7 +1566,7 @@ function addDiceOverviewBox() {
     GM_addStyle(`.dice-overview-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__features { position: absolute; top: 5%; left: 0%; width: 100%; height: 10%; font-size: 1em; text-align: center; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__settings { position: absolute; top: 10%; left: 0%; width: 100%; height: 10%; font-size: 1em; text-align: left; color: white; }`);
-    GM_addStyle(`.dice-overview-box__content__table { position: absolute; top: 18%; left: 0%; width: 100%; height: 90%; }`);
+    GM_addStyle(`.dice-overview-box__content__table { position: absolute; top: 20%; left: 0%; width: 100%; height: 90%; }`);
     GM_addStyle(`.dice-overview-box__content__table table { width: 100%; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__table table, th, td { border: 1px solid white; }`);
     // make text in table centered
@@ -1558,6 +1599,12 @@ function addDiceOverviewBox() {
         beyond20CustomRollNoSend = beyond20Checkbox.checked;
         localStorage.setItem("beyond20Checkbox", beyond20CustomRollNoSend);
     };
+
+    let debounceCheckbox = document.querySelector("#useCustomDebouncer");
+    debounceCheckbox.onclick = (e) => {
+        useCustomDebouncing = debounceCheckbox.checked;
+        localStorage.setItem("useCustomDebouncer", useCustomDebouncing);
+    }
 
     // add style to the button (it should be in the top right corner of the box)
     GM_addStyle(`.dice-overview-box__button { position: absolute; top: 0%; right: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; color: white; z-index: 999`);
