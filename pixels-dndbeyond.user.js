@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.3
+// @version      0.8.3.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1238,6 +1238,7 @@ async function handleConnection(pixel) {
                 if (debounceTimeEnd - debounceTimeStart < debounceThreshold) {
                     // console.log((debounceTimeEnd - debounceTimeStart));
                     // console.log("Roll too fast, ignoring...");
+                    pixel.stopAllAnimations();
                     return;
                 }
             }
