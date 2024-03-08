@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.3.1
+// @version      0.8.3.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -304,10 +304,7 @@ let nextSelfRoll = false;
 let nextDMRoll = false;
 
 let useCustomDebouncing = false;
-let debounceTimeStart = -1;
-let debounceTimeEnd = -1;
 let debounceThreshold = 1000;
-let currentlyRollingOrHandling = false;
 
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
@@ -1229,13 +1226,17 @@ async function handleConnection(pixel) {
     }
 
     pixel.manualDisconnect = false;
+    pixel.debounceTimeStart = -1;
+    pixel.debounceTimeEnd = -1;
+    pixel.currentlyRollingOrHandling = false;
+
     if (!containsObject(pixel, window.pixels)) {
 
         pixel.addEventListener("roll", (face) => {
             // console.log(`=> rolled face: ${face}`);
 
-            if (useCustomDebouncing && debounceTimeStart !== -1) {
-                if (debounceTimeEnd - debounceTimeStart < debounceThreshold) {
+            if (useCustomDebouncing && pixel.debounceTimeStart !== -1) {
+                if (pixel.debounceTimeEnd - pixel.debounceTimeStart < debounceThreshold) {
                     // console.log((debounceTimeEnd - debounceTimeStart));
                     // console.log("Roll too fast, ignoring...");
                     pixel.stopAllAnimations();
@@ -1243,8 +1244,8 @@ async function handleConnection(pixel) {
                 }
             }
 
-            debounceTimeStart = -1;
-            debounceTimeEnd = -1;
+            pixel.debounceTimeStart = -1;
+            pixel.debounceTimeEnd = -1;
             // For now only D20, other dice in the future when I have my own dice and can explore the data structures :(
             if (pixel.dieType === "d6pipped") {
                 rollDice("d6", face);
@@ -1270,15 +1271,15 @@ async function handleConnection(pixel) {
             }
 
             if (useCustomDebouncing) {
-                if ((state.state === "rolling" || state.state === "handling") && !currentlyRollingOrHandling) {
-                    debounceTimeStart = Date.now();
-                    currentlyRollingOrHandling = true;
-                } else if (!currentlyRollingOrHandling && state.state === "onFace") {
-                    debounceTimeStart = Date.now();
-                    debounceTimeEnd = Date.now();
+                if ((state.state === "rolling" || state.state === "handling") && !pixel.currentlyRollingOrHandling) {
+                    pixel.debounceTimeStart = Date.now();
+                    pixel.currentlyRollingOrHandling = true;
+                } else if (!pixel.currentlyRollingOrHandling && state.state === "onFace") {
+                    pixel.debounceTimeStart = Date.now();
+                    pixel.debounceTimeEnd = Date.now();
                 } else if (state.state === "onFace") {
-                    debounceTimeEnd = Date.now();
-                    currentlyRollingOrHandling = false;
+                    pixel.debounceTimeEnd = Date.now();
+                    pixel.currentlyRollingOrHandling = false;
                 }
             }
         });
