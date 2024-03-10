@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.3.2
+// @version      0.8.3.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -584,7 +584,7 @@ function listenForRightClicks() {
 function handleRightClick(e) {
     //e.button describes the mouse button that was clicked
     // 0 is left, 1 is middle, 2 is right
-    if (e.button == 2) {
+    if (e.button == 2 || e.ctrlKey) {
         e.preventDefault();
         e.stopPropagation();
         // console.log("Dice right clicked");
@@ -1335,7 +1335,7 @@ function addPixelModeButton() {
 
             //e.button describes the mouse button that was clicked
             // 0 is left, 1 is middle, 2 is right
-            if (e.button == 0) {
+            if (e.button == 0 && !e.ctrlKey) {
                 pixelModeOnlyOnce = true;
             }
 
