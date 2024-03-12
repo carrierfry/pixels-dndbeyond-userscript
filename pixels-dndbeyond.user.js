@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.3.3
+// @version      0.8.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -306,6 +306,11 @@ let nextDMRoll = false;
 let useCustomDebouncing = false;
 let debounceThreshold = 1000;
 
+let lastGameId = 0;
+
+let isTabletView = false;
+let isMobileView = false;
+
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
         for (const addedNode of mutation.addedNodes) {
@@ -374,13 +379,22 @@ function main() {
             }, 1000);
             checkIfBeyond20Installed();
 
-            let color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
+            let color;
+            if (isTabletView) {
+                color = window.getComputedStyle(document.querySelector(".ct-character-header-tablet__button")).getPropertyValue("border-color");
+            } else if (isMobileView) {
+                color = window.getComputedStyle(document.querySelector(".ct-status-summary-mobile__button")).getPropertyValue("border-color");
+            } else {
+                color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
+            }
 
             GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color:  ${color} !important; }`);
             GM_addStyle(`.ct-character-header-desktop__group--pixels-not-available { cursor: default !important; background-color: darkgray !important; border-color: darkgray !important; }`);
             GM_addStyle(`#red-pixel-icon { filter: brightness(30%) sepia(1) saturate(25); }`);
             addPixelsLogoButton();
-            addPixelModeButton();
+            if (!isMobileView /**&& !isTabletView**/) {
+                addPixelModeButton();
+            }
             addPixelsInfoBox();
             addDiceOverviewBox();
             checkForAutoConnect();
@@ -389,7 +403,11 @@ function main() {
             setInterval(checkForMissingPixelButtons, 1000);
             setInterval(checkForContextMenu, 300);
             setInterval(checkForTodo, 300);
-            setInterval(listenForRightClicks, 300);
+            if (!isMobileView && !isTabletView) {
+                setInterval(listenForRightClicks, 300);
+            } else {
+                setInterval(listenForLongHold, 300)
+            }
             setInterval(listenForMouseOverOfNavItems, 300);
             setInterval(checkForHealthChange, 300);
         } else {
@@ -581,6 +599,14 @@ function listenForRightClicks() {
     });
 }
 
+function listenForLongHold() {
+    document.querySelectorAll(".integrated-dice__container").forEach((element) => {
+        element.removeEventListener('touchstart', handleLongHold);
+
+        element.addEventListener('touchstart', handleLongHold);
+    })
+}
+
 function handleRightClick(e) {
     //e.button describes the mouse button that was clicked
     // 0 is left, 1 is middle, 2 is right
@@ -591,6 +617,13 @@ function handleRightClick(e) {
 
         lastRightClickedButton = e.currentTarget;
     }
+}
+
+function handleLongHold(e) {
+    //e.preventDefault();
+    //e.stopPropagation();
+
+    lastRightClickedButton = e.currentTarget;
 }
 
 function listenForMouseOverOfNavItems() {
@@ -895,10 +928,16 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
 function addPixelsLogoButton() {
     let button = document.createElement("li");
     button.className = "mm-nav-item";
+    if (isMobileView) {
+        button.className = "nav-list__item";
+    }
 
     // create a link
     let link = document.createElement("a");
     link.className = "mm-nav-item__label mm-nav-item__label--link";
+    if (isMobileView || isTabletView) {
+        link.className = "nav-list__item__label";
+    }
     // prevent the link from navigating
     link.href = "#";
     // prevent default click behavior
@@ -912,6 +951,9 @@ function addPixelsLogoButton() {
     button.appendChild(link);
     // find the last mm-nav-item and insert after it
     let lastNavItem = document.querySelectorAll(".mm-nav-item");
+    if (isMobileView || isTabletView) {
+        lastNavItem = document.querySelectorAll(".nav-list__item");
+    }
     lastNavItem = lastNavItem[lastNavItem.length - 1];
     lastNavItem.parentNode.insertBefore(button, lastNavItem.nextSibling);
 }
@@ -930,8 +972,17 @@ function getCharacterName() {
 }
 
 function getGameId() {
-    let gameId = document.querySelector(".ddbc-tooltip").firstChild;
-    return gameId.href.split("/")[4];
+    if (lastGameId !== 0) {
+        return lastGameId;
+    }
+    let gameId;
+    if (!isMobileView && !isTabletView) {
+        gameId = document.querySelector(".ddbc-tooltip").firstChild;
+    } else {
+        gameId = document.querySelector(".ddbc-link")
+    }
+    lastGameId = gameId.href.split("/")[4];
+    return lastGameId;
 }
 
 function getUserId() {
@@ -1319,10 +1370,18 @@ async function handleConnection(pixel) {
 
 function addPixelModeButton() {
     let div = document.createElement("div");
-    div.className = "ct-character-header-desktop__group ct-character-header-desktop__group--pixels";
+    if (isTabletView) {
+        div.className = "ct-character-header-tablet__group ct-character-header-tablet__group--pixels";
+    } else {
+        div.className = "ct-character-header-desktop__group ct-character-header-desktop__group--pixels";
+    }
 
     div.innerHTML = '<div class="ct-character-header-desktop__button" role="button" tabindex="0"> <div class="ct-character-header-desktop__button-icon"> <img id="red-pixel-icon" src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/img/white.png" width="16px" height="16px"> </div> <span class="ct-character-header-desktop__button-label">Pixel Mode</span> </div>'
-    document.querySelector(".ct-character-header-desktop__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-desktop__group--short-rest"));
+    if (isTabletView) {
+        document.querySelector(".ct-character-header-tablet__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-tablet__group--short-rest"));
+    } else {
+        document.querySelector(".ct-character-header-desktop__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-desktop__group--short-rest"));
+    }
     div.oncontextmenu = function (e) {
         e.preventDefault();
     }
@@ -1341,8 +1400,11 @@ function addPixelModeButton() {
 
             pixelMode = !pixelMode;
             if (pixelMode) {
-                div.firstChild.classList.add("ct-character-header-desktop__group--pixels-active");
-
+                if (isTabletView) {
+                    div.firstChild.classList.add("ct-character-header-tablet__group--pixels-active");
+                } else {
+                    div.firstChild.classList.add("ct-character-header-desktop__group--pixels-active");
+                }
                 document.querySelectorAll(".integrated-dice__container").forEach((element) => {
                     originalDiceClick.push(element);
 
@@ -1405,7 +1467,11 @@ function addPixelModeButton() {
                     };
                 });
             } else {
-                div.firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+                if (isTabletView) {
+                    div.firstChild.classList.remove("ct-character-header-tablet__group--pixels-active");
+                } else {
+                    div.firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+                }
 
                 document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
                     element.parentNode.replaceChild(originalDiceClick[index], element);
@@ -1416,7 +1482,11 @@ function addPixelModeButton() {
             }
         });
     } else {
-        div.firstChild.classList.add("ct-character-header-desktop__group--pixels-not-available");
+        if (isTabletView) {
+            div.firstChild.classList.add("ct-character-header-tablet__group--pixels-not-available");
+        } else {
+            div.firstChild.classList.add("ct-character-header-desktop__group--pixels-not-available");
+        }
     }
 
     div.addEventListener('mouseover', function (e) {
@@ -2390,7 +2460,17 @@ function displayTooltip(tooltipText, x, y) {
 }
 
 function checkIfCharacterSheetLoaded() {
-    if (document.querySelector(".ct-character-header-desktop__group--short-rest") !== null) {
+    if (document.querySelector(".ct-character-header-desktop__group--short-rest") !== null || document.querySelector(".ct-character-header-tablet__group--short-rest") !== null || document.querySelector(".ct-character-header-mobile") !== null) {
+        if (document.querySelector(".ct-character-header-tablet__group--short-rest") !== null) {
+            isTabletView = true;
+            isMobileView = false;
+        } else if (document.querySelector(".ct-character-header-mobile") !== null) {
+            isTabletView = false;
+            isMobileView = true;
+        } else {
+            isTabletView = false;
+            isMobileView = false;
+        }
         return true;
     } else {
         return false;
