@@ -52,7 +52,7 @@ With the latest version it is possible to use the Tampermonkey script on the mob
 1. Install the [Kiwi Browser](https://play.google.com/store/apps/details?id=com.kiwibrowser.browser) from the Play Store and open it
 2. Tap on the 3 dots and select `Extensions`. There, tap on `+ (from store)`
 3. A window of the chrome web store opens. Search for `Tampermonkey` and install it
-4. Once installed, click on this link **in the Kiwi browser**! A window of Tampermonkey should pop up, asking you, if you want to install the script. Accept that
+4. Once installed, click on [this link](https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js) **in the Kiwi browser**! A window of Tampermonkey should pop up, asking you, if you want to install the script. Accept that
 5. Go to DnD Beyond and open a character sheet. Make sure to reload it once.
 6. Click on the hamburger menu on the top right and select `Connect to Pixels`. From here on everything should work like it does on PC
 
