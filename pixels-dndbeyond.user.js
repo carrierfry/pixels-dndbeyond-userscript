@@ -1908,9 +1908,13 @@ function getRollNameFromButton(button) {
         potentialName = potentialName.querySelector(".ct-skills__col--skill").innerHTML;
     } else if (button.closest(".ct-quick-info__ability") !== null) {
         potentialName = button.closest(".ct-quick-info__ability").querySelector(".ddbc-ability-summary__abbr").innerText;
+    } else if (button.closest(".ct-main-mobile__ability") !== null) {
+        potentialName = button.closest(".ct-main-mobile__ability").querySelector(".ddbc-ability-summary__abbr").innerText;
+    } else if (button.closest(".ct-main-tablet__ability") !== null) {
+        potentialName = button.closest(".ct-main-tablet__ability").querySelector(".ddbc-ability-summary__abbr").innerText;
     } else if (button.closest(".ddbc-saving-throws-summary__ability-modifier") !== null) {
         potentialName = button.closest(".ddbc-saving-throws-summary__ability-modifier").parentElement.children[3].firstChild.innerText;
-    } else if (button.closest(".ct-initiative-box") !== null) {
+    } else if (button.closest(".ct-initiative-box") !== null || button.closest(".ct-combat-mobile__extra--initiative") !== null) {
         potentialName = "Initiative";
     } else if (button.closest(".ddbc-combat-attack__action") !== null) {
         potentialName = button.closest(".ddbc-combat-attack__action").parentElement.children[1].firstChild.firstChild.innerText;
@@ -1935,9 +1939,9 @@ function getRollNameFromButton(button) {
 function getRollTypeFromButton(button) {
     let potentialRollType = "roll";
     let potentialRollTypeDiv = button.closest(".ct-subsection--skills");
-    if (potentialRollTypeDiv !== null) {
+    if (potentialRollTypeDiv !== null || button.closest(".ct-skills__item") !== null) {
         potentialRollType = "check";
-    } else if (button.closest(".ct-quick-info__ability") !== null) {
+    } else if (button.closest(".ct-quick-info__ability") !== null || button.closest(".ct-main-mobile__ability") !== null || button.closest(".ct-main-tablet__ability") !== null) {
         potentialRollType = "check";
     } else if (button.closest(".ddbc-saving-throws-summary__ability-modifier") !== null) {
         potentialRollType = "save";
