@@ -47,6 +47,15 @@ If you right click on the `Pixel Mode` button, it will enable Pixel Mode until y
 
 Pixel Mode is not available when using [Beyond20](https://beyond20.here-for-more.info/) as there are bugs with it.
 
+## Experimental support for mobile
+With the latest version it is possible to use the Tampermonkey script on the mobile view of DnD Beyond. This requires the use of a browser that supports chrome extensions though:
+1. Install the [Kiwi Browser](https://play.google.com/store/apps/details?id=com.kiwibrowser.browser) from the Play Store and open it
+2. Tap on the 3 dots and select `Extensions`. There, tap on `+ (from store)`
+3. A window of the chrome web store opens. Search for `Tampermonkey` and install it
+4. Once installed, click on this link **in the Kiwi browser**! A window of Tampermonkey should pop up, asking you, if you want to install the script. Accept that
+5. Go to DnD Beyond and open a character sheet. Make sure to reload it once.
+6. Click on the hamburger menu on the top right and select `Connect to Pixels`. From here on everything should work like it does on PC
+
 ## Todos / Things that need to be implemented
 - [x] ~~Support other dice than D20s~~
 - [x] ~~Test if it works with pixel dice actually, since I don't have any right now~~
