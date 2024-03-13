@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.4.2
+// @version      0.8.4.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1532,7 +1532,11 @@ function addPixelsInfoBox() {
     // add style to the info box (it should be on the left side of the page and be closed by default)
     // it should expand to the right when opened and be roughly 300px wide
 
-    GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
+    if (isMobileView || isTabletView) {
+        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
+    } else {
+        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
+    }
     GM_addStyle(`.pixels-info-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
     GM_addStyle(`.pixels-info-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
     GM_addStyle(`.pixels-info-box__content__text { position: absolute; top: 10%; left: 0%; width: 100%; height: 80%; font-size: 1em; text-align: center; color: white; overflow-y:auto; }`);
@@ -1592,7 +1596,12 @@ function addPixelsInfoBox() {
     document.querySelector("body").appendChild(button);
 
     // add style to the button
-    GM_addStyle(`.pixels-info-box__button { position: fixed; top: 18px; left: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
+    if (isMobileView || isTabletView) {
+        // make button in top middle
+        GM_addStyle(`.pixels-info-box__button { position: fixed; top: 6px; left: calc(50% - 16px); width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
+    } else {
+        GM_addStyle(`.pixels-info-box__button { position: fixed; top: 18px; left: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
+    }
 }
 
 function addDiceOverviewBox() {
@@ -1633,7 +1642,11 @@ function addDiceOverviewBox() {
 
     // add style to the info box (it should be in the middle of the page and be closed by default)
 
-    GM_addStyle(`.dice-overview-box { position: fixed; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
+    if (isMobileView || isTabletView) {
+        GM_addStyle(`.dice-overview-box { position: fixed; top: 50%; left: 50%; width: 95%; height: 95%; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
+    } else {
+        GM_addStyle(`.dice-overview-box { position: fixed; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
+    }
     GM_addStyle(`.dice-overview-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
     GM_addStyle(`.dice-overview-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__features { position: absolute; top: 5%; left: 0%; width: 100%; height: 10%; font-size: 1em; text-align: center; color: white; }`);
