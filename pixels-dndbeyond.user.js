@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.4.4
+// @version      0.8.4.5
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1156,7 +1156,12 @@ function rollDice(dieType, value) {
 
             if (pixelModeOnlyOnce && pixelMode) {
                 pixelMode = false;
-                document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+                if (isTabletView) {
+                    document.querySelector(".ct-character-header-tablet__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+                } else {
+                    document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+                }
+                //document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
                 document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
                     element.parentNode.replaceChild(originalDiceClick[index], element);
                 });
@@ -1379,6 +1384,8 @@ function addPixelModeButton() {
         div.className = "ct-character-header-desktop__group ct-character-header-desktop__group--pixels";
     }
 
+    div.style = "user-select: none;";
+
     div.innerHTML = '<div class="ct-character-header-desktop__button" role="button" tabindex="0"> <div class="ct-character-header-desktop__button-icon"> <img id="red-pixel-icon" src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/img/white.png" width="16px" height="16px"> </div> <span class="ct-character-header-desktop__button-label">Pixel Mode</span> </div>'
     if (isTabletView) {
         document.querySelector(".ct-character-header-tablet__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-tablet__group--short-rest"));
@@ -1391,6 +1398,15 @@ function addPixelModeButton() {
 
     if (!beyond20Installed) {
 
+        let longPressStart = 0;
+
+        div.addEventListener('touchstart', function (e) {
+            e.stopPropagation();
+            if (longPressStart === 0) {
+                longPressStart = Date.now();
+            }
+        })
+
         div.addEventListener('mouseup', function (e) {
             e.preventDefault();
             console.log("Pixels button clicked");
@@ -1401,13 +1417,15 @@ function addPixelModeButton() {
                 pixelModeOnlyOnce = true;
             }
 
+            if (longPressStart > 0 && Date.now() - longPressStart > 300) {
+                pixelModeOnlyOnce = false;
+            }
+
+            longPressStart = 0;
+
             pixelMode = !pixelMode;
             if (pixelMode) {
-                if (isTabletView) {
-                    div.firstChild.classList.add("ct-character-header-tablet__group--pixels-active");
-                } else {
-                    div.firstChild.classList.add("ct-character-header-desktop__group--pixels-active");
-                }
+                div.firstChild.classList.add("ct-character-header-desktop__group--pixels-active");
                 document.querySelectorAll(".integrated-dice__container").forEach((element) => {
                     originalDiceClick.push(element);
 
@@ -1470,11 +1488,7 @@ function addPixelModeButton() {
                     };
                 });
             } else {
-                if (isTabletView) {
-                    div.firstChild.classList.remove("ct-character-header-tablet__group--pixels-active");
-                } else {
-                    div.firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
-                }
+                div.firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
 
                 document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
                     element.parentNode.replaceChild(originalDiceClick[index], element);
@@ -1485,11 +1499,7 @@ function addPixelModeButton() {
             }
         });
     } else {
-        if (isTabletView) {
-            div.firstChild.classList.add("ct-character-header-tablet__group--pixels-not-available");
-        } else {
-            div.firstChild.classList.add("ct-character-header-desktop__group--pixels-not-available");
-        }
+        div.firstChild.classList.add("ct-character-header-desktop__group--pixels-not-available");
     }
 
     div.addEventListener('mouseover', function (e) {
@@ -1501,7 +1511,11 @@ function addPixelModeButton() {
             let topleft = getPageTopLeft(div);
 
             if (!beyond20Installed) {
-                displayTooltip("Left click to enable pixel mode for 1 roll.<br>Right click to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
+                if (isMobileView || isTabletView) {
+                    displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
+                } else {
+                    displayTooltip("Left click to enable pixel mode for 1 roll.<br>Right click to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
+                }
             } else {
                 displayTooltip("Pixel Mode is not available when Beyond20 is installed<br>Use the right click menu instead or disable Beyond20", parseInt(topleft.left), parseInt(topleft.top) - 75);
             }
