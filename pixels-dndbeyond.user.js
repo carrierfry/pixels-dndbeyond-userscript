@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.4.3
+// @version      0.8.4.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -512,6 +512,9 @@ function checkForTodo() {
 
 function checkForHealthChange() {
     let element = document.querySelector('div[aria-labelledby="ct-health-summary-current-label ct-health-summary-label"]');
+    if (element === null) {
+        element = document.querySelector(".ct-status-summary-mobile__hp-current");
+    }
     if (element !== null) {
         let currentHealth = parseInt(element.innerText);
 
