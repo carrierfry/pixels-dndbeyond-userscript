@@ -71,5 +71,5 @@ With the latest version it is possible to use the Tampermonkey script on the mob
 - Healing spells can only be rolled with pixel by using the pixel mode. Other spells can also be rolled with pixel by using `right click -> roll with pixel` on the damage button.
 
 ## Software used
-[Pixels Web Connect](https://github.com/GameWithPixels/pixels-js/tree/main/packages/pixels-web-connect) (via [unpkg](https://unpkg.com/))
-[Pixels Edit Animation](https://github.com/GameWithPixels/pixels-js/tree/main/packages/pixels-edit-animation) (via [unpkg](https://unpkg.com/))
+- [Pixels Web Connect](https://github.com/GameWithPixels/pixels-js/tree/main/packages/pixels-web-connect) (via [unpkg](https://unpkg.com/))
+- [Pixels Edit Animation](https://github.com/GameWithPixels/pixels-js/tree/main/packages/pixels-edit-animation) (via [unpkg](https://unpkg.com/))
