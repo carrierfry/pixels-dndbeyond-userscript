@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.4.5
+// @version      0.8.4.6
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -310,6 +310,7 @@ let lastGameId = 0;
 
 let isTabletView = false;
 let isMobileView = false;
+let pixelModeMobileTracker = false;
 
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
@@ -392,9 +393,7 @@ function main() {
             GM_addStyle(`.ct-character-header-desktop__group--pixels-not-available { cursor: default !important; background-color: darkgray !important; border-color: darkgray !important; }`);
             GM_addStyle(`#red-pixel-icon { filter: brightness(30%) sepia(1) saturate(25); }`);
             addPixelsLogoButton();
-            if (!isMobileView /**&& !isTabletView**/) {
-                addPixelModeButton();
-            }
+            addPixelModeButton();
             addPixelsInfoBox();
             addDiceOverviewBox();
             checkForAutoConnect();
@@ -647,11 +646,28 @@ function listenForMouseOverOfNavItems() {
         element.addEventListener('mouseenter', handleMouseEnter);
         element.addEventListener('mouseleave', handleMouseLeave);
     });
+
+    if (isMobileView || isTabletView) {
+        let quickNav = document.querySelectorAll(".ct-quick-nav__menu");
+        if (quickNav.length > 0) {
+            if (!pixelModeMobileTracker) {
+                handleMouseEnter();
+                pixelModeMobileTracker = true;
+            }
+        } else {
+            if (pixelModeMobileTracker) {
+                handleMouseLeave();
+                pixelModeMobileTracker = false;
+            }
+        }
+    }
 }
 
 function handleMouseEnter(e) {
-    e.preventDefault();
-    e.stopPropagation();
+    if (!isMobileView && !isTabletView) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
     // console.log("Nav item hovered");
 
     if (pixelMode) {
@@ -664,8 +680,10 @@ function handleMouseEnter(e) {
 }
 
 function handleMouseLeave(e) {
-    e.preventDefault();
-    e.stopPropagation();
+    if (!isMobileView && !isTabletView) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
     // console.log("Nav item left");
 
     if (pixelMode) {
@@ -1158,6 +1176,8 @@ function rollDice(dieType, value) {
                 pixelMode = false;
                 if (isTabletView) {
                     document.querySelector(".ct-character-header-tablet__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+                } else if (isMobileView) {
+                    document.querySelector(".ct-character-header-mobile__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
                 } else {
                     document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
                 }
@@ -1380,6 +1400,8 @@ function addPixelModeButton() {
     let div = document.createElement("div");
     if (isTabletView) {
         div.className = "ct-character-header-tablet__group ct-character-header-tablet__group--pixels";
+    } else if (isMobileView) {
+        div.className = "ct-character-header-mobile__group ct-character-header-mobile__group--pixels";
     } else {
         div.className = "ct-character-header-desktop__group ct-character-header-desktop__group--pixels";
     }
@@ -1389,6 +1411,8 @@ function addPixelModeButton() {
     div.innerHTML = '<div class="ct-character-header-desktop__button" role="button" tabindex="0"> <div class="ct-character-header-desktop__button-icon"> <img id="red-pixel-icon" src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/img/white.png" width="16px" height="16px"> </div> <span class="ct-character-header-desktop__button-label">Pixel Mode</span> </div>'
     if (isTabletView) {
         document.querySelector(".ct-character-header-tablet__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-tablet__group--short-rest"));
+    } else if (isMobileView) {
+        document.querySelector(".ct-character-header-mobile__group--gap").appendChild(div);
     } else {
         document.querySelector(".ct-character-header-desktop__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-desktop__group--short-rest"));
     }
@@ -1533,6 +1557,8 @@ function addPixelModeButton() {
             tootltipShown = false;
         }
     });
+
+    GM_addStyle(".ct-character-header-mobile__group--pixels { width: 140px; margin-left: calc(100% - 140px); }");
 }
 
 function addPixelsInfoBox() {
@@ -1550,7 +1576,7 @@ function addPixelsInfoBox() {
     // it should expand to the right when opened and be roughly 300px wide
 
     if (isMobileView || isTabletView) {
-        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
+        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; min-width: 250px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
     } else {
         GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
     }
