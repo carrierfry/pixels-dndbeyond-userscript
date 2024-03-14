@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.4.9
+// @version      0.8.5
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -399,6 +399,7 @@ function main() {
             checkForAutoConnect();
             loadLocalStorage();
             setInterval(checkForOpenGameLog, 500);
+            setInterval(checkIfCharacterSheetLoaded, 1000);
             setInterval(checkForMissingPixelButtons, 1000);
             setInterval(checkForContextMenu, 300);
             setInterval(checkForTodo, 300);
@@ -454,11 +455,27 @@ function checkForMissingPixelButtons() {
     // When you for example resize the window, so that the mobile view is shown, the buttons are removed. After resizing back to desktop view, the buttons do not
     // get added back. This function checks for that and adds them back if they are missing.
 
-    let forgeButton = document.querySelectorAll(".ct-character-header-desktop__group--builder");
-    let pixelModeButton = document.querySelectorAll(".ct-character-header-desktop__group--pixels");
-    if (forgeButton.length > 0 && pixelModeButton.length === 0) {
-        addPixelsLogoButton();
-        addPixelModeButton();
+    if (isMobileView) {
+        if (document.querySelector(".nav-list__item--connect-to-pixels") === null) {
+            addPixelsLogoButton();
+        }
+        if (document.querySelector(".ct-character-header-mobile__group--pixels") === null) {
+            addPixelModeButton();
+        }
+    } else if (isTabletView) {
+        if (document.querySelector(".nav-list__item--connect-to-pixels") === null) {
+            addPixelsLogoButton();
+        }
+        if (document.querySelector(".ct-character-header-tablet__group--pixels") === null) {
+            addPixelModeButton();
+        }
+    } else {
+        let forgeButton = document.querySelectorAll(".ct-character-header-desktop__group--builder");
+        let pixelModeButton = document.querySelectorAll(".ct-character-header-desktop__group--pixels");
+        if (forgeButton.length > 0 && pixelModeButton.length === 0) {
+            addPixelsLogoButton();
+            addPixelModeButton();
+        }
     }
 }
 
@@ -950,7 +967,7 @@ function addPixelsLogoButton() {
     let button = document.createElement("li");
     button.className = "mm-nav-item";
     if (isMobileView || isTabletView) {
-        button.className = "nav-list__item";
+        button.className = "nav-list__item nav-list__item--connect-to-pixels";
     }
 
     // create a link
