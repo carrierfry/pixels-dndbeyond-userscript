@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.4.8
+// @version      0.8.4.9
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1463,13 +1463,11 @@ function addPixelModeButton() {
             }
 
             if (isMobileView || isTabletView) {
-                if (e.button == 0 && !e.ctrlKey) {
-                    if (longPressStart > 0 && Date.now() - longPressStart > 300) {
-                        pixelModeOnlyOnce = false;
-                        console.log("Pixels button long clicked");
-                    } else {
-                        pixelModeOnlyOnce = true;
-                    }
+                if (longPressStart > 0 && Date.now() - longPressStart > 300) {
+                    pixelModeOnlyOnce = false;
+                    console.log("Pixels button long clicked");
+                } else {
+                    pixelModeOnlyOnce = true;
                 }
             }
 
