@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.4.6
+// @version      0.8.4.7
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1535,7 +1535,9 @@ function addPixelModeButton() {
             let topleft = getPageTopLeft(div);
 
             if (!beyond20Installed) {
-                if (isMobileView || isTabletView) {
+                if (isMobileView) {
+                    displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left) - 50, parseInt(topleft.top) - 50);
+                } else if (isTabletView) {
                     displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
                 } else {
                     displayTooltip("Left click to enable pixel mode for 1 roll.<br>Right click to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
