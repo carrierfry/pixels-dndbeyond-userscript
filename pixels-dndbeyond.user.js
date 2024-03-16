@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.5
+// @version      0.8.5.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -409,6 +409,7 @@ function main() {
                 setInterval(listenForLongHold, 300)
             }
             setInterval(listenForMouseOverOfNavItems, 300);
+            setInterval(listenForQuickNavMenu, 20);
             setInterval(checkForHealthChange, 300);
         } else {
             let alertText = "";
@@ -663,7 +664,9 @@ function listenForMouseOverOfNavItems() {
         element.addEventListener('mouseenter', handleMouseEnter);
         element.addEventListener('mouseleave', handleMouseLeave);
     });
+}
 
+function listenForQuickNavMenu() {
     if (isMobileView || isTabletView) {
         let quickNav = document.querySelectorAll(".ct-quick-nav__menu");
         if (quickNav.length > 0) {
