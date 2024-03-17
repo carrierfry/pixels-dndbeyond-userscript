@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.5.3
+// @version      0.8.5.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -672,13 +672,13 @@ function listenForQuickNavMenu() {
         let swiperMenu = document.querySelectorAll(".ct-component-carousel__placeholders--changing");
         if (quickNav.length > 0 || swiperMenu.length > 0) {
             if (!pixelModeMobileTracker) {
-                console.log("Quick nav menu opened");
+                // console.log("Quick nav menu opened");
                 handleMouseEnter();
                 pixelModeMobileTracker = true;
             }
         } else {
             if (pixelModeMobileTracker) {
-                console.log("Quick nav menu closed");
+                // console.log("Quick nav menu closed");
                 handleMouseLeave();
                 pixelModeMobileTracker = false;
             }
@@ -1644,7 +1644,7 @@ function addPixelsInfoBox() {
         GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
     }
     GM_addStyle(`.pixels-info-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
-    GM_addStyle(`.pixels-info-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
+    GM_addStyle(`.pixels-info-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; cursor: move; }`);
     GM_addStyle(`.pixels-info-box__content__text { position: absolute; top: 10%; left: 0%; width: 100%; height: 80%; font-size: 1em; text-align: center; color: white; overflow-y:auto; }`);
     GM_addStyle(`.pixels-info-box__content__buttons { position: absolute; top: 90%; left: 0%; width: 100%; height: 10%; }`);
     GM_addStyle(`.pixels-info-box__content__buttons_target { position: absolute; top: 75%; left: 0%; width: 100%; height: 10%; }`);
