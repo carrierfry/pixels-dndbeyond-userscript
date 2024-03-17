@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.5.2
+// @version      0.8.5.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1708,6 +1708,34 @@ function addPixelsInfoBox() {
     } else {
         GM_addStyle(`.pixels-info-box__button { position: fixed; top: 18px; left: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
     }
+
+    // Initialize variables for tracking dragging state and position
+    let isDragging = false;
+    let startPosition = { x: 0, y: 0 };
+    let offset = { x: 0, y: 0 };
+
+    // Add mousedown event listener to enable dragging
+    div.addEventListener('mousedown', (event) => {
+        isDragging = true;
+        startPosition = { x: event.clientX, y: event.clientY };
+        offset = {
+            x: div.offsetLeft - event.clientX,
+            y: div.offsetTop - event.clientY
+        };
+    });
+
+    // Add mousemove event listener to move the element while dragging
+    document.addEventListener('mousemove', (event) => {
+        if (isDragging) {
+            div.style.left = `${event.clientX + offset.x}px`;
+            div.style.top = `${event.clientY + offset.y}px`;
+        }
+    });
+
+    // Add mouseup event listener to disable dragging
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
 }
 
 function addDiceOverviewBox() {
