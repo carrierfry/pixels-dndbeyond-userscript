@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.5.4
+// @version      0.8.5.5
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1727,8 +1727,20 @@ function addPixelsInfoBox() {
     // Add mousemove event listener to move the element while dragging
     document.addEventListener('mousemove', (event) => {
         if (isDragging) {
-            div.style.left = `${event.clientX + offset.x}px`;
-            div.style.top = `${event.clientY + offset.y}px`;
+            // Calculate new position
+            let newX = event.clientX + offset.x;
+            let newY = event.clientY + offset.y;
+
+            // Get the boundaries of the screen
+            const maxX = window.innerWidth - div.offsetWidth;
+            const maxY = window.innerHeight - div.offsetHeight;
+
+            // Ensure the box stays within the screen boundaries
+            newX = Math.max(0, Math.min(newX, maxX));
+            newY = Math.max(0, Math.min(newY, maxY));
+
+            div.style.left = `${newX}px`;
+            div.style.top = `${newY}px`;
         }
     });
 
