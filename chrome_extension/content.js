@@ -1,4 +1,5 @@
 const { repeatConnect, requestPixel, getPixel, Color } = pixelsWebConnect;
+const { createDataSetForAnimation, EditAnimationRainbow } = pixelsEditAnimation;
 
 const diceTypes = {
     "d4": {
@@ -274,6 +275,10 @@ let gameLogEntries = [];
 let lastHealth = -1;
 let currentlyObserving = false;
 let socketRetryCount = 0;
+let d100RollHappening = false;
+let d100RollParts = [];
+let specialLighting = false;
+let beyond20CustomRollNoSend = false;
 
 let nextAdvantageRoll = false;
 let nextDisadvantageRoll = false;
@@ -281,6 +286,15 @@ let nextCriticalRoll = false;
 let nextEveryoneRoll = false;
 let nextSelfRoll = false;
 let nextDMRoll = false;
+
+let useCustomDebouncing = false;
+let debounceThreshold = 1000;
+
+let lastGameId = 0;
+
+let isTabletView = false;
+let isMobileView = false;
+let pixelModeMobileTracker = false;
 
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
@@ -307,12 +321,15 @@ let socket = null;
 const nativeWebSocket = window.WebSocket;
 function interceptSocket() {
     window.WebSocket = function (...args) {
+        console.log("Intercepting socket");
         const socketTmp = new nativeWebSocket(...args);
         socket = socketTmp;
 
         socket.addEventListener("close", (event) => {
             interceptSocket();
         });
+
+        checkForOtherPeoplesRolls();
 
         window.WebSocket = nativeWebSocket;
 
@@ -347,7 +364,14 @@ function main() {
             }, 1000);
             checkIfBeyond20Installed();
 
-            let color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
+            let color;
+            if (isTabletView) {
+                color = window.getComputedStyle(document.querySelector(".ct-character-header-tablet__button")).getPropertyValue("border-color");
+            } else if (isMobileView) {
+                color = window.getComputedStyle(document.querySelector(".ct-status-summary-mobile__button")).getPropertyValue("border-color");
+            } else {
+                color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
+            }
 
             GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color:  ${color} !important; }`);
             GM_addStyle(`.ct-character-header-desktop__group--pixels-not-available { cursor: default !important; background-color: darkgray !important; border-color: darkgray !important; }`);
@@ -357,12 +381,19 @@ function main() {
             addPixelsInfoBox();
             addDiceOverviewBox();
             checkForAutoConnect();
+            loadLocalStorage();
             setInterval(checkForOpenGameLog, 500);
+            setInterval(checkIfCharacterSheetLoaded, 1000);
             setInterval(checkForMissingPixelButtons, 1000);
             setInterval(checkForContextMenu, 300);
             setInterval(checkForTodo, 300);
-            setInterval(listenForRightClicks, 300);
+            if (!isMobileView && !isTabletView) {
+                setInterval(listenForRightClicks, 300);
+            } else {
+                setInterval(listenForLongHold, 300)
+            }
             setInterval(listenForMouseOverOfNavItems, 300);
+            setInterval(listenForQuickNavMenu, 20);
             setInterval(checkForHealthChange, 300);
         } else {
             let alertText = "";
@@ -380,6 +411,23 @@ function main() {
     });
 }
 
+function loadLocalStorage() {
+    if (localStorage.getItem("lightingCheckbox") !== null) {
+        specialLighting = localStorage.getItem("lightingCheckbox") === "true";
+        document.getElementById("diceOption").checked = specialLighting;
+    }
+
+    if (localStorage.getItem("beyond20Checkbox") !== null) {
+        beyond20CustomRollNoSend = localStorage.getItem("beyond20Checkbox") === "true";
+        document.getElementById("beyond20CustomRolls").checked = beyond20CustomRollNoSend;
+    }
+
+    if (localStorage.getItem("useCustomDebouncer") !== null) {
+        useCustomDebouncing = localStorage.getItem("useCustomDebouncer") === "true";
+        document.getElementById("useCustomDebouncer").checked = useCustomDebouncing;
+    }
+}
+
 function checkIfBeyond20Installed() {
     let beyond20 = document.querySelector(".ct-beyond20-settings-button");
     if (beyond20 !== null) {
@@ -392,11 +440,27 @@ function checkForMissingPixelButtons() {
     // When you for example resize the window, so that the mobile view is shown, the buttons are removed. After resizing back to desktop view, the buttons do not
     // get added back. This function checks for that and adds them back if they are missing.
 
-    let forgeButton = document.querySelectorAll(".ct-character-header-desktop__group--builder");
-    let pixelModeButton = document.querySelectorAll(".ct-character-header-desktop__group--pixels");
-    if (forgeButton.length > 0 && pixelModeButton.length === 0) {
-        addPixelsLogoButton();
-        addPixelModeButton();
+    if (isMobileView) {
+        if (document.querySelector(".nav-list__item--connect-to-pixels") === null) {
+            addPixelsLogoButton();
+        }
+        if (document.querySelector(".ct-character-header-mobile__group--pixels") === null) {
+            addPixelModeButton();
+        }
+    } else if (isTabletView) {
+        if (document.querySelector(".nav-list__item--connect-to-pixels") === null) {
+            addPixelsLogoButton();
+        }
+        if (document.querySelector(".ct-character-header-tablet__group--pixels") === null) {
+            addPixelModeButton();
+        }
+    } else {
+        let forgeButton = document.querySelectorAll(".ct-character-header-desktop__group--builder");
+        let pixelModeButton = document.querySelectorAll(".ct-character-header-desktop__group--pixels");
+        if (forgeButton.length > 0 && pixelModeButton.length === 0) {
+            addPixelsLogoButton();
+            addPixelModeButton();
+        }
     }
 }
 
@@ -449,6 +513,9 @@ function checkForTodo() {
 
 function checkForHealthChange() {
     let element = document.querySelector('div[aria-labelledby="ct-health-summary-current-label ct-health-summary-label"]');
+    if (element === null) {
+        element = document.querySelector(".ct-status-summary-mobile__hp-current");
+    }
     if (element !== null) {
         let currentHealth = parseInt(element.innerText);
 
@@ -517,7 +584,7 @@ function addRollWithPixelButton(contextMenu) {
 
             if (window.pixels !== undefined && pixels.length > 0) {
                 for (let i = 0; i < pixels.length; i++) {
-                    if (pixels[i].dieType === dieType) {
+                    if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
                         lightUpPixel(pixels[i], "waitingForRoll");
                     }
                 }
@@ -536,16 +603,31 @@ function listenForRightClicks() {
     });
 }
 
+function listenForLongHold() {
+    document.querySelectorAll(".integrated-dice__container").forEach((element) => {
+        element.removeEventListener('touchstart', handleLongHold);
+
+        element.addEventListener('touchstart', handleLongHold);
+    })
+}
+
 function handleRightClick(e) {
     //e.button describes the mouse button that was clicked
     // 0 is left, 1 is middle, 2 is right
-    if (e.button == 2) {
+    if (e.button == 2 || e.ctrlKey) {
         e.preventDefault();
         e.stopPropagation();
         // console.log("Dice right clicked");
 
         lastRightClickedButton = e.currentTarget;
     }
+}
+
+function handleLongHold(e) {
+    //e.preventDefault();
+    //e.stopPropagation();
+
+    lastRightClickedButton = e.currentTarget;
 }
 
 function listenForMouseOverOfNavItems() {
@@ -568,9 +650,31 @@ function listenForMouseOverOfNavItems() {
     });
 }
 
+function listenForQuickNavMenu() {
+    if (isMobileView || isTabletView) {
+        let quickNav = document.querySelectorAll(".ct-quick-nav__menu");
+        let swiperMenu = document.querySelectorAll(".ct-component-carousel__placeholders--changing");
+        if (quickNav.length > 0 || swiperMenu.length > 0) {
+            if (!pixelModeMobileTracker) {
+                // console.log("Quick nav menu opened");
+                handleMouseEnter();
+                pixelModeMobileTracker = true;
+            }
+        } else {
+            if (pixelModeMobileTracker) {
+                // console.log("Quick nav menu closed");
+                handleMouseLeave();
+                pixelModeMobileTracker = false;
+            }
+        }
+    }
+}
+
 function handleMouseEnter(e) {
-    e.preventDefault();
-    e.stopPropagation();
+    if (!isMobileView && !isTabletView) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
     // console.log("Nav item hovered");
 
     if (pixelMode) {
@@ -583,8 +687,10 @@ function handleMouseEnter(e) {
 }
 
 function handleMouseLeave(e) {
-    e.preventDefault();
-    e.stopPropagation();
+    if (!isMobileView && !isTabletView) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
     // console.log("Nav item left");
 
     if (pixelMode) {
@@ -643,7 +749,7 @@ function handleMouseLeave(e) {
 
                 if (window.pixels !== undefined && pixels.length > 0) {
                     for (let i = 0; i < pixels.length; i++) {
-                        if (pixels[i].dieType === dieType) {
+                        if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
                             lightUpPixel(pixels[i], "waitingForRoll");
                         }
                     }
@@ -850,10 +956,16 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
 function addPixelsLogoButton() {
     let button = document.createElement("li");
     button.className = "mm-nav-item";
+    if (isMobileView || isTabletView) {
+        button.className = "nav-list__item nav-list__item--connect-to-pixels";
+    }
 
     // create a link
     let link = document.createElement("a");
     link.className = "mm-nav-item__label mm-nav-item__label--link";
+    if (isMobileView || isTabletView) {
+        link.className = "nav-list__item__label";
+    }
     // prevent the link from navigating
     link.href = "#";
     // prevent default click behavior
@@ -867,6 +979,9 @@ function addPixelsLogoButton() {
     button.appendChild(link);
     // find the last mm-nav-item and insert after it
     let lastNavItem = document.querySelectorAll(".mm-nav-item");
+    if (isMobileView || isTabletView) {
+        lastNavItem = document.querySelectorAll(".nav-list__item");
+    }
     lastNavItem = lastNavItem[lastNavItem.length - 1];
     lastNavItem.parentNode.insertBefore(button, lastNavItem.nextSibling);
 }
@@ -885,8 +1000,17 @@ function getCharacterName() {
 }
 
 function getGameId() {
-    let gameId = document.querySelector(".ddbc-tooltip").firstChild;
-    return gameId.href.split("/")[4];
+    if (lastGameId !== 0) {
+        return lastGameId;
+    }
+    let gameId;
+    if (!isMobileView && !isTabletView) {
+        gameId = document.querySelector(".ddbc-tooltip").firstChild;
+    } else {
+        gameId = document.querySelector(".ddbc-link")
+    }
+    lastGameId = gameId.href.split("/")[4];
+    return lastGameId;
 }
 
 function getUserId() {
@@ -1002,76 +1126,98 @@ function rollDice(dieType, value) {
 
     if (multiRollComplete || Object.keys(currentlyExpectedRoll).length === 0 || currentlyExpectedRoll.amount === 1) {
         let initJson;
-        if (Object.keys(currentlyExpectedRoll).length > 0) {
-            initJson = buildInitialJson(dieType, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName, currentlyExpectedRoll.target, currentlyExpectedRoll.scope);
+        if (d100RollHappening && d100RollParts.length === 0) {
+            d100RollParts.push(value);
+            console.log("waiting for second d100 roll part");
+        } else if (d100RollHappening && d100RollParts.length === 1) {
+            d100RollParts.push(value);
+            let d100Value = d100RollParts[0] + d100RollParts[1];
+            if (d100Value === 0) {
+                d100Value = 100;
+            }
+            initJson = buildInitialJson("d100", modifier, d100Value);
         } else {
-            initJson = buildInitialJson(dieType, modifier, amount);
-        }
+            if (Object.keys(currentlyExpectedRoll).length > 0) {
+                initJson = buildInitialJson(dieType, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName, currentlyExpectedRoll.target, currentlyExpectedRoll.scope);
+            } else {
+                initJson = buildInitialJson(dieType, modifier, amount);
+            }
 
-        if (socket && socket.readyState === 1) {
-            socket.send(JSON.stringify(initJson));
-        }
+            if (socket && socket.readyState === 1) {
+                socket.send(JSON.stringify(initJson));
+            }
 
-        let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
+            let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
 
-        let rolledJson;
-        if (Object.keys(currentlyExpectedRoll).length > 0) {
-            rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName, currentlyExpectedRoll.target, currentlyExpectedRoll.scope);
-        } else {
-            rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount);
-        }
+            let rolledJson;
+            if (Object.keys(currentlyExpectedRoll).length > 0) {
+                rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName, currentlyExpectedRoll.target, currentlyExpectedRoll.scope);
+            } else {
+                rolledJson = buildRolledJson(dieType, initJson.data.rollId, dieValue, modifier, amount);
+            }
 
-        if (socket && socket.readyState === 1) {
-            setTimeout(() => {
-                // console.log("sending value: " + dieValue);
-                socket.send(JSON.stringify(rolledJson));
-            }, 1000);
-        }
+            if (socket && socket.readyState === 1) {
+                setTimeout(() => {
+                    // console.log("sending value: " + dieValue);
+                    socket.send(JSON.stringify(rolledJson));
+                }, 1000);
+            }
 
-        if (Object.keys(currentlyExpectedRoll).length > 0 && (currentlyExpectedRoll.advantage || currentlyExpectedRoll.disadvantage)) {
-            if (currentlyExpectedRoll.advantage && last2D20Rolls.length === 2 && (last2D20Rolls[0] === 20 || last2D20Rolls[1] === 20)) {
-                nextDmgRollIsCrit = true;
-            } else if (currentlyExpectedRoll.disadvantage && last2D20Rolls.length === 2 && (last2D20Rolls[0] === 1 && last2D20Rolls[1] === 1)) {
+            if (Object.keys(currentlyExpectedRoll).length > 0 && (currentlyExpectedRoll.advantage || currentlyExpectedRoll.disadvantage)) {
+                if (currentlyExpectedRoll.advantage && last2D20Rolls.length === 2 && (last2D20Rolls[0] === 20 || last2D20Rolls[1] === 20)) {
+                    nextDmgRollIsCrit = true;
+                } else if (currentlyExpectedRoll.disadvantage && last2D20Rolls.length === 2 && (last2D20Rolls[0] === 1 && last2D20Rolls[1] === 1)) {
+                    nextDmgRollIsCrit = true;
+                }
+            } else if (Object.keys(currentlyExpectedRoll).length > 0 && last2D20Rolls[last2D20Rolls.length - 1] === 20 && dieType === "d20") {
                 nextDmgRollIsCrit = true;
             }
-        } else if (Object.keys(currentlyExpectedRoll).length > 0 && last2D20Rolls[last2D20Rolls.length - 1] === 20 && dieType === "d20") {
-            nextDmgRollIsCrit = true;
+
+            createToast(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], modifier, rolledJson.data.rolls[0].diceNotationStr);
+            // displayDieRoll(dieType, value, modifier);
+            // appendElementToGameLog(rolledJson);
+            rolledJsonArray.push(rolledJson);
+            currentlyExpectedRoll = {};
+
+            if (pixelModeOnlyOnce && pixelMode) {
+                pixelMode = false;
+                if (isTabletView) {
+                    document.querySelector(".ct-character-header-tablet__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+                } else if (isMobileView) {
+                    document.querySelector(".ct-character-header-mobile__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+                } else {
+                    document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+                }
+                //document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+                document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
+                    element.parentNode.replaceChild(originalDiceClick[index], element);
+                });
+                originalDiceClick = [];
+                pixelModeOnlyOnce = false;
+            }
+
+            if (multiRollComplete) {
+                multiRolls = [];
+            }
+            doubledAmount = false;
+
+            document.querySelector("#advButton").style.backgroundColor = "darkgray";
+            document.querySelector("#critButton").style.backgroundColor = "darkgray";
+            document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+            document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
+            document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+            document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+
+            nextAdvantageRoll = false;
+            nextDisadvantageRoll = false;
+            nextCriticalRoll = false;
+            nextEveryoneRoll = false;
+            nextSelfRoll = false;
+            nextDMRoll = false;
+
+            d100RollHappening = false;
+            d100RollParts = [];
         }
-
-        createToast(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], modifier, rolledJson.data.rolls[0].diceNotationStr);
-        // displayDieRoll(dieType, value, modifier);
-        // appendElementToGameLog(rolledJson);
-        rolledJsonArray.push(rolledJson);
-        currentlyExpectedRoll = {};
-
-        if (pixelModeOnlyOnce && pixelMode) {
-            pixelMode = false;
-            document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
-            document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
-                element.parentNode.replaceChild(originalDiceClick[index], element);
-            });
-            originalDiceClick = [];
-            pixelModeOnlyOnce = false;
-        }
-
-        if (multiRollComplete) {
-            multiRolls = [];
-        }
-        doubledAmount = false;
-
-        document.querySelector("#advButton").style.backgroundColor = "darkgray";
-        document.querySelector("#critButton").style.backgroundColor = "darkgray";
-        document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
-        document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
-        document.querySelector("#selfButton").style.backgroundColor = "darkgray";
-        document.querySelector("#dmButton").style.backgroundColor = "darkgray";
-
-        nextAdvantageRoll = false;
-        nextDisadvantageRoll = false;
-        nextCriticalRoll = false;
-        nextEveryoneRoll = false;
-        nextSelfRoll = false;
-        nextDMRoll = false;
     } else {
         console.log("waiting for more rolls");
     }
@@ -1087,7 +1233,7 @@ async function requestMyPixel() {
 
 async function lightUpPixel(pixel, reason = undefined) {
     if (reason === "waitingForRoll") {
-        await pixel.blink(Color.dimYellow, { count: 3, duration: 3000, fade: 0.3 });
+        await pixel.blink(Color.dimYellow, { count: 3, duration: 2000, fade: 0.3 });
     } else if (reason === "connected") {
         await pixel.blink(Color.dimGreen, { count: 1, duration: 1500, fade: 0.8 });
     } else if (reason === "damage") {
@@ -1096,6 +1242,12 @@ async function lightUpPixel(pixel, reason = undefined) {
         await pixel.blink(Color.dimGreen, { count: 2, duration: 3000, fade: 1 });
     } else if (reason === "quickLightUp") {
         await pixel.blink(Color.dimMagenta, { count: 3, duration: 1000, fade: 0.8 });
+    } else if (reason === "nat1") {
+        await pixel.blink(Color.dimRed, { count: 1, duration: 3000, fade: 1 });
+    } else if (reason === "nat20") {
+        await rainbowPixel(pixel);
+    } else if (reason === "none") {
+        // DO NOTHING
     } else {
         await pixel.blink(Color.brightCyan);
     }
@@ -1107,6 +1259,21 @@ async function lightUpAllPixels(reason = undefined) {
             await lightUpPixel(pixels[i], reason);
         }
     }
+}
+
+async function rainbowPixel(pixel) {
+    // Create a simple rainbow animation
+    const editDataSet = createDataSetForAnimation(
+        new EditAnimationRainbow({
+            duration: 3,
+            count: 2,
+            fade: 0.5,
+            intensity: 0.3
+        })
+    );
+
+    // And play it on the Pixel die
+    await pixel.playTestAnimation(editDataSet.toDataSet());
 }
 
 async function checkForAutoConnect() {
@@ -1145,11 +1312,26 @@ async function handleConnection(pixel) {
     }
 
     pixel.manualDisconnect = false;
+    pixel.debounceTimeStart = -1;
+    pixel.debounceTimeEnd = -1;
+    pixel.currentlyRollingOrHandling = false;
+
     if (!containsObject(pixel, window.pixels)) {
 
         pixel.addEventListener("roll", (face) => {
-            console.log(`=> rolled face: ${face}`);
+            // console.log(`=> rolled face: ${face}`);
 
+            if (useCustomDebouncing && pixel.debounceTimeStart !== -1) {
+                if (pixel.debounceTimeEnd - pixel.debounceTimeStart < debounceThreshold) {
+                    // console.log((debounceTimeEnd - debounceTimeStart));
+                    // console.log("Roll too fast, ignoring...");
+                    pixel.stopAllAnimations();
+                    return;
+                }
+            }
+
+            pixel.debounceTimeStart = -1;
+            pixel.debounceTimeEnd = -1;
             // For now only D20, other dice in the future when I have my own dice and can explore the data structures :(
             if (pixel.dieType === "d6pipped") {
                 rollDice("d6", face);
@@ -1158,8 +1340,38 @@ async function handleConnection(pixel) {
             }
         });
 
+        pixel.addEventListener("rollState", (state) => {
+            // console.log(`=> rollState: ${state}`);
+            // console.log(state);
+
+            if (pixel.dieType === "d10" || pixel.dieType === "d00") {
+                if (state.state === "rolling") {
+                    // check if the other die (d10 or d00) is also rolling
+                    for (let i = 0; i < window.pixels.length; i++) {
+                        if ((pixel.dieType === "d00" && window.pixels[i].dieType === "d10" && window.pixels[i].status === "rolling")
+                            || (pixel.dieType === "d10" && window.pixels[i].dieType === "d00" && window.pixels[i].status === "rolling")) {
+                            d100RollHappening = true;
+                        }
+                    }
+                }
+            }
+
+            if (useCustomDebouncing) {
+                if ((state.state === "rolling" || state.state === "handling") && !pixel.currentlyRollingOrHandling) {
+                    pixel.debounceTimeStart = Date.now();
+                    pixel.currentlyRollingOrHandling = true;
+                } else if (!pixel.currentlyRollingOrHandling && state.state === "onFace") {
+                    pixel.debounceTimeStart = Date.now();
+                    pixel.debounceTimeEnd = Date.now();
+                } else if (state.state === "onFace") {
+                    pixel.debounceTimeEnd = Date.now();
+                    pixel.currentlyRollingOrHandling = false;
+                }
+            }
+        });
+
         pixel.addEventListener("status", (status) => {
-            console.log(`=> status: ${status}`);
+            // console.log(`=> status: ${status}`);
 
             if (pixel.manualDisconnect === false) {
                 if (status === "disconnected") {
@@ -1169,6 +1381,7 @@ async function handleConnection(pixel) {
                     }, 1000);
                 }
             }
+
             if (status === "ready") {
                 pixel.manualDisconnect = false;
                 lightUpPixel(pixel, "connected");
@@ -1192,30 +1405,84 @@ async function handleConnection(pixel) {
 
 function addPixelModeButton() {
     let div = document.createElement("div");
-    div.className = "ct-character-header-desktop__group ct-character-header-desktop__group--pixels";
+    if (isTabletView) {
+        div.className = "ct-character-header-tablet__group ct-character-header-tablet__group--pixels";
+    } else if (isMobileView) {
+        div.className = "ct-character-header-mobile__group ct-character-header-mobile__group--pixels";
+    } else {
+        div.className = "ct-character-header-desktop__group ct-character-header-desktop__group--pixels";
+    }
+
+    div.style = "user-select: none;";
 
     div.innerHTML = '<div class="ct-character-header-desktop__button" role="button" tabindex="0"> <div class="ct-character-header-desktop__button-icon"> <img id="red-pixel-icon" src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/img/white.png" width="16px" height="16px"> </div> <span class="ct-character-header-desktop__button-label">Pixel Mode</span> </div>'
-    document.querySelector(".ct-character-header-desktop__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-desktop__group--short-rest"));
+    if (isTabletView) {
+        document.querySelector(".ct-character-header-tablet__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-tablet__group--short-rest"));
+    } else if (isMobileView) {
+        document.querySelector(".ct-character-header-mobile__group--gap").appendChild(div);
+    } else {
+        document.querySelector(".ct-character-header-desktop__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-desktop__group--short-rest"));
+    }
     div.oncontextmenu = function (e) {
         e.preventDefault();
     }
 
     if (!beyond20Installed) {
 
-        div.addEventListener('mouseup', function (e) {
+        let longPressStart = 0;
+
+        div.addEventListener('touchstart', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (longPressStart === 0) {
+                longPressStart = Date.now();
+
+                if (!tootltipShown) {
+
+                    let topleft = getPageTopLeft(div);
+
+                    if (!beyond20Installed) {
+                        if (isMobileView) {
+                            displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left) - 50, parseInt(topleft.top) - 50);
+                        } else if (isTabletView) {
+                            displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
+                        } else {
+                            displayTooltip("Left click to enable pixel mode for 1 roll.<br>Right click to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
+                        }
+                    } else {
+                        displayTooltip("Pixel Mode is not available when Beyond20 is installed<br>Use the right click menu instead or disable Beyond20", parseInt(topleft.left), parseInt(topleft.top) - 75);
+                    }
+
+                    tootltipShown = true;
+                }
+            }
+        })
+
+        function handleMouseUpTouchEnd(e) {
             e.preventDefault();
             console.log("Pixels button clicked");
 
             //e.button describes the mouse button that was clicked
             // 0 is left, 1 is middle, 2 is right
-            if (e.button == 0) {
+            if (e.button == 0 && !e.ctrlKey) {
                 pixelModeOnlyOnce = true;
+                console.log("Pixels button clicked once");
             }
+
+            if (isMobileView || isTabletView) {
+                if (longPressStart > 0 && Date.now() - longPressStart > 300) {
+                    pixelModeOnlyOnce = false;
+                    console.log("Pixels button long clicked");
+                } else {
+                    pixelModeOnlyOnce = true;
+                }
+            }
+
+            longPressStart = 0;
 
             pixelMode = !pixelMode;
             if (pixelMode) {
                 div.firstChild.classList.add("ct-character-header-desktop__group--pixels-active");
-
                 document.querySelectorAll(".integrated-dice__container").forEach((element) => {
                     originalDiceClick.push(element);
 
@@ -1270,7 +1537,7 @@ function addPixelModeButton() {
 
                         if (window.pixels !== undefined && pixels.length > 0) {
                             for (let i = 0; i < pixels.length; i++) {
-                                if (pixels[i].dieType === dieType) {
+                                if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
                                     lightUpPixel(pixels[i], "waitingForRoll");
                                 }
                             }
@@ -1287,7 +1554,19 @@ function addPixelModeButton() {
                 originalDiceClick = [];
                 pixelModeOnlyOnce = false;
             }
-        });
+            if (isMobileView || isTabletView) {
+                if (tootltipShown) {
+                    document.querySelector(".tippy-popper--pixel-mode").remove();
+                    tootltipShown = false;
+                }
+            }
+        }
+
+        if (isMobileView || isTabletView) {
+            div.addEventListener('touchend', handleMouseUpTouchEnd);
+        } else {
+            div.addEventListener('mouseup', handleMouseUpTouchEnd);
+        }
     } else {
         div.firstChild.classList.add("ct-character-header-desktop__group--pixels-not-available");
     }
@@ -1301,7 +1580,13 @@ function addPixelModeButton() {
             let topleft = getPageTopLeft(div);
 
             if (!beyond20Installed) {
-                displayTooltip("Left click to enable pixel mode for 1 roll.<br>Right click to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
+                if (isMobileView) {
+                    displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left) - 50, parseInt(topleft.top) - 50);
+                } else if (isTabletView) {
+                    displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
+                } else {
+                    displayTooltip("Left click to enable pixel mode for 1 roll.<br>Right click to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
+                }
             } else {
                 displayTooltip("Pixel Mode is not available when Beyond20 is installed<br>Use the right click menu instead or disable Beyond20", parseInt(topleft.left), parseInt(topleft.top) - 75);
             }
@@ -1319,6 +1604,8 @@ function addPixelModeButton() {
             tootltipShown = false;
         }
     });
+
+    GM_addStyle(".ct-character-header-mobile__group--pixels { width: 140px; margin-left: calc(100% - 140px); }");
 }
 
 function addPixelsInfoBox() {
@@ -1335,9 +1622,13 @@ function addPixelsInfoBox() {
     // add style to the info box (it should be on the left side of the page and be closed by default)
     // it should expand to the right when opened and be roughly 300px wide
 
-    GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
+    if (isMobileView || isTabletView) {
+        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; min-width: 250px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
+    } else {
+        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
+    }
     GM_addStyle(`.pixels-info-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
-    GM_addStyle(`.pixels-info-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
+    GM_addStyle(`.pixels-info-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; cursor: move; }`);
     GM_addStyle(`.pixels-info-box__content__text { position: absolute; top: 10%; left: 0%; width: 100%; height: 80%; font-size: 1em; text-align: center; color: white; overflow-y:auto; }`);
     GM_addStyle(`.pixels-info-box__content__buttons { position: absolute; top: 90%; left: 0%; width: 100%; height: 10%; }`);
     GM_addStyle(`.pixels-info-box__content__buttons_target { position: absolute; top: 75%; left: 0%; width: 100%; height: 10%; }`);
@@ -1395,7 +1686,52 @@ function addPixelsInfoBox() {
     document.querySelector("body").appendChild(button);
 
     // add style to the button
-    GM_addStyle(`.pixels-info-box__button { position: fixed; top: 18px; left: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
+    if (isMobileView || isTabletView) {
+        // make button in top middle
+        GM_addStyle(`.pixels-info-box__button { position: fixed; top: 6px; left: calc(50% - 16px); width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
+    } else {
+        GM_addStyle(`.pixels-info-box__button { position: fixed; top: 18px; left: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
+    }
+
+    // Initialize variables for tracking dragging state and position
+    let isDragging = false;
+    let startPosition = { x: 0, y: 0 };
+    let offset = { x: 0, y: 0 };
+
+    // Add mousedown event listener to enable dragging
+    div.addEventListener('mousedown', (event) => {
+        isDragging = true;
+        startPosition = { x: event.clientX, y: event.clientY };
+        offset = {
+            x: div.offsetLeft - event.clientX,
+            y: div.offsetTop - event.clientY
+        };
+    });
+
+    // Add mousemove event listener to move the element while dragging
+    document.addEventListener('mousemove', (event) => {
+        if (isDragging) {
+            // Calculate new position
+            let newX = event.clientX + offset.x;
+            let newY = event.clientY + offset.y;
+
+            // Get the boundaries of the screen
+            const maxX = window.innerWidth - div.offsetWidth;
+            const maxY = window.innerHeight - div.offsetHeight;
+
+            // Ensure the box stays within the screen boundaries
+            newX = Math.max(0, Math.min(newX, maxX));
+            newY = Math.max(0, Math.min(newY, maxY));
+
+            div.style.left = `${newX}px`;
+            div.style.top = `${newY}px`;
+        }
+    });
+
+    // Add mouseup event listener to disable dragging
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
 }
 
 function addDiceOverviewBox() {
@@ -1403,7 +1739,7 @@ function addDiceOverviewBox() {
     div.className = "dice-overview-box";
 
     // the box should have a title and a list of all dice that are currently connected
-    let innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
+    let innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div> <div class="dice-overview-box__content__settings"> <input type="checkbox" id="diceOption" name="diceOption"><label for="diceOption"> Light up dice when other characters score a natural 1 or 20</label><br> <input type="checkbox" id="beyond20CustomRolls" name="beyond20CustomRolls"><label for="beyond20CustomRolls"> Do not send custom rolls to Roll20 (only relevant when Beyond20 is installed)</label><br> <input type="checkbox" id="useCustomDebouncer" name="useCustomDebouncer"><label for="useCustomDebouncer"> EXPERIMENTAL: Make false positives when rolling less likely</label> </div> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
 
     if (!!navigator?.bluetooth?.getDevices) {
         innerHTML = innerHTML.replaceAll('AUTO_STATUS', '<span class="pixelsAutoReconnectStatus" style="color: lime">enabled</span>');
@@ -1436,11 +1772,16 @@ function addDiceOverviewBox() {
 
     // add style to the info box (it should be in the middle of the page and be closed by default)
 
-    GM_addStyle(`.dice-overview-box { position: fixed; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
+    if (isMobileView || isTabletView) {
+        GM_addStyle(`.dice-overview-box { position: fixed; top: 50%; left: 50%; width: 95%; height: 95%; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
+    } else {
+        GM_addStyle(`.dice-overview-box { position: fixed; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
+    }
     GM_addStyle(`.dice-overview-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
     GM_addStyle(`.dice-overview-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__features { position: absolute; top: 5%; left: 0%; width: 100%; height: 10%; font-size: 1em; text-align: center; color: white; }`);
-    GM_addStyle(`.dice-overview-box__content__table { position: absolute; top: 10%; left: 0%; width: 100%; height: 90%; }`);
+    GM_addStyle(`.dice-overview-box__content__settings { position: absolute; top: 10%; left: 0%; width: 100%; height: 10%; font-size: 1em; text-align: left; color: white; }`);
+    GM_addStyle(`.dice-overview-box__content__table { position: absolute; top: 20%; left: 0%; width: 100%; height: 90%; }`);
     GM_addStyle(`.dice-overview-box__content__table table { width: 100%; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__table table, th, td { border: 1px solid white; }`);
     // make text in table centered
@@ -1461,6 +1802,24 @@ function addDiceOverviewBox() {
 
         div.style.display = "none";
     };
+
+    let lightingCheckbox = document.querySelector("#diceOption");
+    lightingCheckbox.onclick = (e) => {
+        specialLighting = lightingCheckbox.checked;
+        localStorage.setItem("lightingCheckbox", specialLighting);
+    };
+
+    let beyond20Checkbox = document.querySelector("#beyond20CustomRolls");
+    beyond20Checkbox.onclick = (e) => {
+        beyond20CustomRollNoSend = beyond20Checkbox.checked;
+        localStorage.setItem("beyond20Checkbox", beyond20CustomRollNoSend);
+    };
+
+    let debounceCheckbox = document.querySelector("#useCustomDebouncer");
+    debounceCheckbox.onclick = (e) => {
+        useCustomDebouncing = debounceCheckbox.checked;
+        localStorage.setItem("useCustomDebouncer", useCustomDebouncing);
+    }
 
     // add style to the button (it should be in the top right corner of the box)
     GM_addStyle(`.dice-overview-box__button { position: absolute; top: 0%; right: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; color: white; z-index: 999`);
@@ -1692,9 +2051,13 @@ function getRollNameFromButton(button) {
         potentialName = potentialName.querySelector(".ct-skills__col--skill").innerHTML;
     } else if (button.closest(".ct-quick-info__ability") !== null) {
         potentialName = button.closest(".ct-quick-info__ability").querySelector(".ddbc-ability-summary__abbr").innerText;
+    } else if (button.closest(".ct-main-mobile__ability") !== null) {
+        potentialName = button.closest(".ct-main-mobile__ability").querySelector(".ddbc-ability-summary__abbr").innerText;
+    } else if (button.closest(".ct-main-tablet__ability") !== null) {
+        potentialName = button.closest(".ct-main-tablet__ability").querySelector(".ddbc-ability-summary__abbr").innerText;
     } else if (button.closest(".ddbc-saving-throws-summary__ability-modifier") !== null) {
         potentialName = button.closest(".ddbc-saving-throws-summary__ability-modifier").parentElement.children[3].firstChild.innerText;
-    } else if (button.closest(".ct-initiative-box") !== null) {
+    } else if (button.closest(".ct-initiative-box") !== null || button.closest(".ct-combat-mobile__extra--initiative") !== null) {
         potentialName = "Initiative";
     } else if (button.closest(".ddbc-combat-attack__action") !== null) {
         potentialName = button.closest(".ddbc-combat-attack__action").parentElement.children[1].firstChild.firstChild.innerText;
@@ -1719,9 +2082,9 @@ function getRollNameFromButton(button) {
 function getRollTypeFromButton(button) {
     let potentialRollType = "roll";
     let potentialRollTypeDiv = button.closest(".ct-subsection--skills");
-    if (potentialRollTypeDiv !== null) {
+    if (potentialRollTypeDiv !== null || button.closest(".ct-skills__item") !== null) {
         potentialRollType = "check";
-    } else if (button.closest(".ct-quick-info__ability") !== null) {
+    } else if (button.closest(".ct-quick-info__ability") !== null || button.closest(".ct-main-mobile__ability") !== null || button.closest(".ct-main-tablet__ability") !== null) {
         potentialRollType = "check";
     } else if (button.closest(".ddbc-saving-throws-summary__ability-modifier") !== null) {
         potentialRollType = "save";
@@ -2003,10 +2366,16 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
     }
 
     // let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"> <div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"> <div class="noty_body"> <div class="dice_result "> <div class="dice_result__info"> <div class="dice_result__info__title"><span class="dice_result__info__rolldetail"> </span><span class="dice_result__rolltype rolltype_roll" style="animation: linear party-time-text 1s infinite;">pixel roll</span></div> <div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span></div><span class="dice_result__info__dicenotation" title="AMOUNTDIETYPE">DICENOTATIONSTR</span> </div> <div class="dice_result__total-container"><span class="dice_result__total-result dice_result__total-result-">VALUE</span></div> </span> </div> </div> <div class="noty_progressbar"></div> </div> </div>'
-    let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"><div id="noty_bar_UUID" class="noty_bar noty_type__alert noty_theme__valhalla noty_close_with_click"><div class="noty_body"><div class="dice_result CRITICAL"><div class="dice_result__info"><div class="dice_result__info__title"><span class="dice_result__info__rolldetail">custom: </span><span class="dice_result__rolltype rolltype_ROLLTYPE">ROLLTYPE</span></div>POTENTIALTARGET<div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span><span class="dice_result__info__breakdown" title="VALUE">VALUE</span></div><span class="dice_result__info__dicenotation" title="DICENOTATIONSTR">DICENOTATIONSTR</span></div><span class="dice_result__divider dice_result__divider--"></span><div class="dice_result__total-container">ROLLKIND<span class="dice_result__total-result dice_result__total-result-">TOTAL</span></div></div></div><div class="noty_progressbar"></div></div></div>';
+    let innerDiv = '<div id="noty_layout__bottomRight" role="alert" aria-live="polite" class="noty_layout uncollapse" onclick="this.remove()"><div id="noty_bar_UUID" class="NOBA noty_type__alert noty_theme__valhalla noty_close_with_click"><div class="noty_body"><div class="dice_result CRITICAL"><div class="dice_result__info"><div class="dice_result__info__title"><span class="dice_result__info__rolldetail">custom: </span><span class="dice_result__rolltype rolltype_ROLLTYPE">ROLLTYPE</span></div>POTENTIALTARGET<div class="dice_result__info__results"><span class="dice-icon-die dice-icon-die--DIETYPE" alt=""></span><span class="dice_result__info__breakdown" title="VALUE">VALUE</span></div><span class="dice_result__info__dicenotation" title="DICENOTATIONSTR">DICENOTATIONSTR</span></div><span class="dice_result__divider dice_result__divider--"></span><div class="dice_result__total-container">ROLLKIND<span class="dice_result__total-result dice_result__total-result-">TOTAL</span></div></div></div><div class="noty_progressbar"></div></div></div>';
     innerDiv = innerDiv.replace("UUID", generateDnDBeyondId());
     innerDiv = innerDiv.replaceAll("DIETYPE", dieType);
     innerDiv = innerDiv.replaceAll("DICENOTATIONSTR", diceNotationStr);
+
+    if (beyond20CustomRollNoSend && Object.keys(currentlyExpectedRoll).length === 0) {
+        innerDiv = innerDiv.replaceAll("NOBA", "noty_bar_custom");
+    } else {
+        innerDiv = innerDiv.replaceAll("NOBA", "noty_bar");
+    }
 
     let fullValue = "";
     if (currentlyExpectedRoll.amount > 1) {
@@ -2084,6 +2453,47 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
     setTimeout(() => {
         div.remove();
     }, 8000);
+}
+
+function checkForOtherPeoplesRolls() {
+    if (socket !== undefined) {
+        socket.addEventListener('message', function (event) {
+            if (event.data === "pong") {
+                return;
+            }
+            let json = JSON.parse(event.data);
+            if (json.eventType === "dice/roll/fulfilled") {
+                console.log(json);
+
+                if (json.data.rolls[0].diceNotationStr.includes("d20")) {
+                    let rollBaseValue = -1;
+                    // is roll a single d20
+                    if (json.data.rolls[0].result.values.length === 1) {
+                        rollBaseValue = json.data.rolls[0].result.values[0];
+                    } else {
+                        // is roll advantage or disadvantage
+                        if (json.data.rolls[0].rollKind === "advantage") {
+                            rollBaseValue = Math.max(json.data.rolls[0].result.values[0], json.data.rolls[0].result.values[1]);
+                        } else if (json.data.rolls[0].rollKind === "disadvantage") {
+                            rollBaseValue = Math.min(json.data.rolls[0].result.values[0], json.data.rolls[0].result.values[1]);
+                        }
+                    }
+
+                    // is roll nat20 or nat1
+                    let lightingType = "none";
+                    if (rollBaseValue === 20) {
+                        lightingType = "nat20";
+                    } else if (rollBaseValue === 1) {
+                        lightingType = "nat1";
+                    }
+
+                    if (specialLighting) {
+                        lightUpAllPixels(lightingType);
+                    }
+                }
+            }
+        });
+    }
 }
 
 window.appendElementToGameLog = function (json) {
@@ -2197,7 +2607,17 @@ function displayTooltip(tooltipText, x, y) {
 }
 
 function checkIfCharacterSheetLoaded() {
-    if (document.querySelector(".ct-character-header-desktop__group--short-rest") !== null) {
+    if (document.querySelector(".ct-character-header-desktop__group--short-rest") !== null || document.querySelector(".ct-character-header-tablet__group--short-rest") !== null || document.querySelector(".ct-character-header-mobile") !== null) {
+        if (document.querySelector(".ct-character-header-tablet__group--short-rest") !== null) {
+            isTabletView = true;
+            isMobileView = false;
+        } else if (document.querySelector(".ct-character-header-mobile") !== null) {
+            isTabletView = false;
+            isMobileView = true;
+        } else {
+            isTabletView = false;
+            isMobileView = false;
+        }
         return true;
     } else {
         return false;
