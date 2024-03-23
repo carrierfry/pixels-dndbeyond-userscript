@@ -4,6 +4,10 @@ This is a userscript that integrates [Pixels](https://gamewithpixels.com/) into 
 
 This is currently the only way to use Pixels with DnD Beyond, as DnD Beyond didn't add support for Pixels yet.
 
+## Video
+I made a short video that shows how to use the full chrome extension:
+<iframe width="560" height="315" src="https://www.youtube.com/embed/_I-3SIao1Kk?si=qvPbi09Q37ANzERe" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 ## Features
 - Can connect to Pixel dice
 - Can identify a roll with a Pixel die and submit it to DnD Beyond as a custom roll
