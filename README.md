@@ -37,11 +37,14 @@ Alternatively, you can install the userscript by following the instructions belo
 
 1. Open a character sheet in DnD Beyond (make sure to reload the page once it's open if you opened it by clicking on `view` in your campaign or character overview)
 2. Click on the `Connect to Pixels` text at the top right (to the right of the `Subscribe` text) and connect to your Pixel dice
-3. Repeat step 4 for every pixel die you want to connect
+![connect to pixels image](documentation/img/connect_to_pixels.png)
+3. Repeat step 2 for every pixel die you want to connect
 
 Once you are connected to your Pixel dice, there are 2 ways to roll with them:
 1. Click on `Pixel Mode`. Now every time you click on a check/save/damage button, it will wait for you to roll your Pixel die and then automatically submit the roll to DnD Beyond.
+![pixel mode button](documentation/img/pixel_mode_button.png)
 2. Right click on a check/save/damage button and click on `Roll with Pixels`. Again the site will wait for you to roll your Pixel die and then automatically submit the roll to DnD Beyond.
+![roll with pixels button](documentation/img/roll_with_pixels_button.png)
 
 ## What is "Pixel Mode"?
 Pixel Mode allows you to choose a check/save/damage and then roll your Pixel die. Instead of rolling a virtual die, the site waits for you to roll your Pixel die and then automatically submits the roll to DnD Beyond.
