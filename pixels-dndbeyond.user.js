@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.8.5.5
+// @version      0.9.0
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
+// @match        https://www.dndbeyond.com/combat-tracker/*
 // @icon         https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/chrome_extension/img/red_128x128.png
 // @run-at       document-start
 // @grant        none
@@ -312,6 +313,8 @@ let isTabletView = false;
 let isMobileView = false;
 let pixelModeMobileTracker = false;
 
+let isEncounterBuilder = false;
+
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
         for (const addedNode of mutation.addedNodes) {
@@ -359,9 +362,13 @@ setTimeout(main, 500);
 
 // Main function
 function main() {
-    if (!checkIfCharacterSheetLoaded()) {
-        setTimeout(main, 500);
-        return;
+    if (!window.location.href.includes("combat-tracker")) {
+        if (!checkIfCharacterSheetLoaded()) {
+            setTimeout(main, 500);
+            return;
+        }
+    } else {
+        isEncounterBuilder = true;
     }
 
     if ((!socket || socket.readyState !== 1) && socketRetryCount < 8) {
@@ -374,26 +381,29 @@ function main() {
     navigator.bluetooth.getAvailability().then(isBluetoothAvailable => {
         if (isBluetoothAvailable) {
             setTimeout(() => {
-                if (socket && socket.readyState === 1) {
+                if (socket && socket.readyState === 1 && !isEncounterBuilder) {
                     getCompleteCharacterData();
                 }
             }, 1000);
             checkIfBeyond20Installed();
 
-            let color;
-            if (isTabletView) {
-                color = window.getComputedStyle(document.querySelector(".ct-character-header-tablet__button")).getPropertyValue("border-color");
-            } else if (isMobileView) {
-                color = window.getComputedStyle(document.querySelector(".ct-status-summary-mobile__button")).getPropertyValue("border-color");
-            } else {
-                color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
-            }
+            if (!isEncounterBuilder) {
+                let color;
+                if (isTabletView) {
+                    color = window.getComputedStyle(document.querySelector(".ct-character-header-tablet__button")).getPropertyValue("border-color");
+                } else if (isMobileView) {
+                    color = window.getComputedStyle(document.querySelector(".ct-status-summary-mobile__button")).getPropertyValue("border-color");
+                } else {
+                    color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
+                }
 
-            GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color:  ${color} !important; }`);
-            GM_addStyle(`.ct-character-header-desktop__group--pixels-not-available { cursor: default !important; background-color: darkgray !important; border-color: darkgray !important; }`);
-            GM_addStyle(`#red-pixel-icon { filter: brightness(30%) sepia(1) saturate(25); }`);
+                GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color:  ${color} !important; }`);
+                GM_addStyle(`.ct-character-header-desktop__group--pixels-not-available { cursor: default !important; background-color: darkgray !important; border-color: darkgray !important; }`);
+                GM_addStyle(`#red-pixel-icon { filter: brightness(30%) sepia(1) saturate(25); }`);
+
+                addPixelModeButton();
+            }
             addPixelsLogoButton();
-            addPixelModeButton();
             addPixelsInfoBox();
             addDiceOverviewBox();
             checkForAutoConnect();
@@ -1011,7 +1021,12 @@ function getCharacterId() {
 }
 
 function getCharacterName() {
-    let name = document.querySelector(".ddb-character-app-sn0l9p");
+    let name;
+    if (isEncounterBuilder) {
+        name = document.querySelector(".mon-stat-block__name");
+    } else {
+        name = document.querySelector(".ddb-character-app-sn0l9p");
+    }
     return name.innerText;
 }
 
@@ -1020,12 +1035,21 @@ function getGameId() {
         return lastGameId;
     }
     let gameId;
-    if (!isMobileView && !isTabletView) {
-        gameId = document.querySelector(".ddbc-tooltip").firstChild;
+    if (isEncounterBuilder) {
+        if (socket && socket.readyState === 1) {
+            gameId = socket.url.split("gameId=")[1].split("&userId")[0];
+            lastGameId = gameId;
+        } else {
+            lastGameId = 0;
+        }
     } else {
-        gameId = document.querySelector(".ddbc-link")
+        if (!isMobileView && !isTabletView) {
+            gameId = document.querySelector(".ddbc-tooltip").firstChild;
+        } else {
+            gameId = document.querySelector(".ddbc-link")
+        }
+        lastGameId = gameId.href.split("/")[4];
     }
-    lastGameId = gameId.href.split("/")[4];
     return lastGameId;
 }
 
@@ -1035,11 +1059,24 @@ function getUserId() {
 }
 
 function getAvatarUrl() {
-    let avatar = document.querySelector(".ddbc-character-avatar__portrait").getAttribute("style");
-    if (avatar === null) {
-        return null;
+    let avatar;
+    if (!isEncounterBuilder) {
+        avatar = document.querySelector(".ddbc-character-avatar__portrait").getAttribute("style");
+        if (avatar === null) {
+            return null;
+        }
+        avatar = avatar.split("url(\"")[1].split("\")")[0];
+    } else {
+        let allCharacters = document.querySelectorAll(".combatant-summary__name");
+        allCharacters.forEach((element) => {
+            if (element.innerText === getCharacterName()) {
+                avatar = element.parentElement.parentElement.firstChild.firstChild.src;
+                if (avatar === null) {
+                    return null;
+                }
+            }
+        })
     }
-    avatar = avatar.split("url(\"")[1].split("\")")[0];
     return avatar;
 }
 
@@ -1991,13 +2028,24 @@ function getDieTypeFromButton(button) {
         dieType = "d20";
     }
 
+    if (dieType.includes(")")) {
+        dieType = dieType.substr(0, dieType.indexOf(")"));
+    }
     return dieType;
 }
 
 function getModifierFromButton(button) {
     let modifier = 0;
     if (typeof button.firstChild === "object" && typeof button.firstChild.data === "string") {
-        modifier = button.firstChild.data;
+        if (isEncounterBuilder) {
+            if (button.innerHTML.includes("(")) {
+                modifier = button.innerHTML.substr(1, 100).substr(0, button.innerHTML.length - 2);
+            } else {
+                modifier = button.innerHTML;
+            }
+        } else {
+            modifier = button.firstChild.data;
+        }
     } else {
 
         modifier = button.firstChild.getAttribute("aria-label");
@@ -2025,7 +2073,6 @@ function getModifierFromButton(button) {
     } else {
         modifier = parseInt(modifier);
     }
-
     return modifier;
 }
 
@@ -2056,6 +2103,9 @@ function getAmountFromButton(button) {
         amount = 1;
     }
 
+    if ((amount + "").includes("(")) {
+        amount = amount.substr(1, 100);
+    }
     amount = parseInt(amount);
 
     return amount;
@@ -2306,7 +2356,7 @@ function determineRollType(rollButton) {
     if (!pixelMode) {
 
         let list = undefined;
-        if (target !== getCharacterId()) {
+        if (target !== getCharacterId() && !isEncounterBuilder) {
             list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.nextSibling.nextSibling.firstChild; // ul
         } else {
             list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.firstChild;
