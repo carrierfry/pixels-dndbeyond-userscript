@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.0
+// @version      0.9.0.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -413,11 +413,8 @@ function main() {
             setInterval(checkForMissingPixelButtons, 1000);
             setInterval(checkForContextMenu, 300);
             setInterval(checkForTodo, 300);
-            if (!isMobileView && !isTabletView) {
-                setInterval(listenForRightClicks, 300);
-            } else {
-                setInterval(listenForLongHold, 300)
-            }
+            setInterval(listenForRightClicks, 300);
+            setInterval(listenForLongHold, 300)
             setInterval(listenForMouseOverOfNavItems, 300);
             setInterval(listenForQuickNavMenu, 20);
             setInterval(checkForHealthChange, 300);
@@ -1500,7 +1497,7 @@ function addPixelModeButton() {
                         } else if (isTabletView) {
                             displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
                         } else {
-                            displayTooltip("Left click to enable pixel mode for 1 roll.<br>Right click to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
+                            displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
                         }
                     } else {
                         displayTooltip("Pixel Mode is not available when Beyond20 is installed<br>Use the right click menu instead or disable Beyond20", parseInt(topleft.left), parseInt(topleft.top) - 75);
@@ -1509,7 +1506,7 @@ function addPixelModeButton() {
                     tootltipShown = true;
                 }
             }
-        })
+        });
 
         function handleMouseUpTouchEnd(e) {
             e.preventDefault();
@@ -1522,13 +1519,11 @@ function addPixelModeButton() {
                 console.log("Pixels button clicked once");
             }
 
-            if (isMobileView || isTabletView) {
-                if (longPressStart > 0 && Date.now() - longPressStart > 300) {
-                    pixelModeOnlyOnce = false;
-                    console.log("Pixels button long clicked");
-                } else {
-                    pixelModeOnlyOnce = true;
-                }
+            if (longPressStart > 0 && Date.now() - longPressStart > 300) {
+                pixelModeOnlyOnce = false;
+                console.log("Pixels button long clicked");
+            } else if (longPressStart > 0) {
+                pixelModeOnlyOnce = true;
             }
 
             longPressStart = 0;
@@ -1607,19 +1602,15 @@ function addPixelModeButton() {
                 originalDiceClick = [];
                 pixelModeOnlyOnce = false;
             }
-            if (isMobileView || isTabletView) {
-                if (tootltipShown) {
-                    document.querySelector(".tippy-popper--pixel-mode").remove();
-                    tootltipShown = false;
-                }
+
+            if (tootltipShown) {
+                document.querySelector(".tippy-popper--pixel-mode").remove();
+                tootltipShown = false;
             }
         }
 
-        if (isMobileView || isTabletView) {
-            div.addEventListener('touchend', handleMouseUpTouchEnd);
-        } else {
-            div.addEventListener('mouseup', handleMouseUpTouchEnd);
-        }
+        div.addEventListener('touchend', handleMouseUpTouchEnd);
+        div.addEventListener('mouseup', handleMouseUpTouchEnd);
     } else {
         div.firstChild.classList.add("ct-character-header-desktop__group--pixels-not-available");
     }
