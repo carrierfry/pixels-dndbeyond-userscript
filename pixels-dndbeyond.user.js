@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.1
+// @version      0.9.1.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -586,6 +586,7 @@ function addRollWithPixelButton(contextMenu) {
         button.onclick = (e) => {
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation();
             console.log("Roll with Pixels clicked");
 
             contextMenu.remove();
@@ -757,6 +758,7 @@ function handleMouseLeave(e) {
             elClone.onclick = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation();
                 console.log("Dice clicked");
 
                 let modifier = getModifierFromButton(elClone);
@@ -1527,6 +1529,7 @@ function addPixelModeButton() {
         e.preventDefault();
     }
 
+    beyond20Installed = false;
     if (!beyond20Installed) {
 
         let longPressStart = 0;
@@ -1593,6 +1596,7 @@ function addPixelModeButton() {
                     elClone.onclick = (e) => {
                         e.preventDefault();
                         e.stopPropagation();
+                        e.stopImmediatePropagation();
                         console.log("Dice clicked");
 
                         let modifier = getModifierFromButton(elClone);
