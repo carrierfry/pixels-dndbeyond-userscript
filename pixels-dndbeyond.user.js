@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.1.1
+// @version      0.9.1.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -297,6 +297,7 @@ let d100RollHappening = false;
 let d100RollParts = [];
 let specialLighting = false;
 let beyond20CustomRollNoSend = false;
+let virtualDice = true;
 
 let nextAdvantageRoll = false;
 let nextDisadvantageRoll = false;
@@ -463,6 +464,13 @@ function loadLocalStorage() {
         useCustomDebouncing = localStorage.getItem("useCustomDebouncer") === "true";
         document.getElementById("useCustomDebouncer").checked = useCustomDebouncing;
     }
+
+    if (localStorage.getItem("pixelModeOnlyExistingDice") !== null) {
+        virtualDice = localStorage.getItem("pixelModeOnlyExistingDice") === "true";
+        document.getElementById("pixelModeOnlyExistingDice").checked = virtualDice;
+    }
+
+    localStorage.setItem("pixelModeOnlyExistingDice", virtualDice);
 }
 
 function checkIfBeyond20Installed() {
@@ -766,6 +774,13 @@ function handleMouseLeave(e) {
                 let amount = getAmountFromButton(elClone);
                 let rollType = getRollTypeFromButton(elClone);
                 let rollName = getRollNameFromButton(elClone);
+
+                if (!checkIfDieTypeIsConnected(dieType) && virtualDice) {
+                    elClone.parentNode.replaceChild(element, elClone);
+                    element.click();
+                    element.parentNode.replaceChild(elClone, element);
+                    return;
+                }
 
                 let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
                 if (isEncounterBuilder) {
@@ -1587,7 +1602,7 @@ function addPixelModeButton() {
                     div.classList.add("ct-character-header-desktop__group--pixels-active");
                 }
                 div.firstChild.classList.add("ct-character-header-desktop__group--pixels-active");
-                document.querySelectorAll(".integrated-dice__container").forEach((element) => {
+                document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
                     originalDiceClick.push(element);
 
                     let elClone = element.cloneNode(true);
@@ -1604,6 +1619,13 @@ function addPixelModeButton() {
                         let amount = getAmountFromButton(elClone);
                         let rollType = getRollTypeFromButton(elClone);
                         let rollName = getRollNameFromButton(elClone);
+
+                        if (!checkIfDieTypeIsConnected(dieType) && virtualDice) {
+                            elClone.parentNode.replaceChild(element, elClone);
+                            element.click();
+                            element.parentNode.replaceChild(elClone, element);
+                            return;
+                        }
 
                         let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
                         if (isEncounterBuilder) {
@@ -1848,7 +1870,7 @@ function addDiceOverviewBox() {
     div.className = "dice-overview-box";
 
     // the box should have a title and a list of all dice that are currently connected
-    let innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div> <div class="dice-overview-box__content__settings"> <input type="checkbox" id="diceOption" name="diceOption"><label for="diceOption"> Light up dice when other characters score a natural 1 or 20</label><br> <input type="checkbox" id="beyond20CustomRolls" name="beyond20CustomRolls"><label for="beyond20CustomRolls"> Do not send custom rolls to Roll20 (only relevant when Beyond20 is installed)</label><br> <input type="checkbox" id="useCustomDebouncer" name="useCustomDebouncer"><label for="useCustomDebouncer"> EXPERIMENTAL: Make false positives when rolling less likely</label> </div> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
+    let innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div> <div class="dice-overview-box__content__settings"> <input type="checkbox" id="diceOption" name="diceOption"><label for="diceOption"> Light up dice when other characters score a natural 1 or 20</label><br> <input type="checkbox" id="beyond20CustomRolls" name="beyond20CustomRolls"><label for="beyond20CustomRolls"> Do not send custom rolls to Roll20 (only relevant when Beyond20 is installed)</label><br> <input type="checkbox" id="pixelModeOnlyExistingDice" name="pixelModeOnlyExistingDice" checked><label for="pixelModeOnlyExistingDice"> When using pixel mode, use virtual dice when no Pixel die of a type is connected</label><br> <input type="checkbox" id="useCustomDebouncer" name="useCustomDebouncer"><label for="useCustomDebouncer"> EXPERIMENTAL: Make false positives when rolling less likely</label> </div> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
 
     if (!!navigator?.bluetooth?.getDevices) {
         innerHTML = innerHTML.replaceAll('AUTO_STATUS', '<span class="pixelsAutoReconnectStatus" style="color: lime">enabled</span>');
@@ -1890,7 +1912,7 @@ function addDiceOverviewBox() {
     GM_addStyle(`.dice-overview-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__features { position: absolute; top: 5%; left: 0%; width: 100%; height: 10%; font-size: 1em; text-align: center; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__settings { position: absolute; top: 10%; left: 0%; width: 100%; height: 10%; font-size: 1em; text-align: left; color: white; }`);
-    GM_addStyle(`.dice-overview-box__content__table { position: absolute; top: 20%; left: 0%; width: 100%; height: 90%; }`);
+    GM_addStyle(`.dice-overview-box__content__table { position: absolute; top: 25%; left: 0%; width: 100%; height: 90%; }`);
     GM_addStyle(`.dice-overview-box__content__table table { width: 100%; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__table table, th, td { border: 1px solid white; }`);
     // make text in table centered
@@ -1928,7 +1950,13 @@ function addDiceOverviewBox() {
     debounceCheckbox.onclick = (e) => {
         useCustomDebouncing = debounceCheckbox.checked;
         localStorage.setItem("useCustomDebouncer", useCustomDebouncing);
-    }
+    };
+
+    let virtualDiceCheckbox = document.querySelector("#pixelModeOnlyExistingDice");
+    virtualDiceCheckbox.onclick = (e) => {
+        virtualDice = virtualDiceCheckbox.checked;
+        localStorage.setItem("pixelModeOnlyExistingDice", virtualDice);
+    };
 
     // add style to the button (it should be in the top right corner of the box)
     GM_addStyle(`.dice-overview-box__button { position: absolute; top: 0%; right: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; color: white; z-index: 999`);
@@ -2810,6 +2838,15 @@ function checkIfCharacterSheetLoaded() {
     } else {
         return false;
     }
+}
+
+function checkIfDieTypeIsConnected(dieType) {
+    for (let i = 0; i < window.pixels.length; i++) {
+        if ((window.pixels[i].dieType === dieType || (window.pixels[i].dieType === "d6pipped" && dieType === "d6")) && window.pixels[i].isReady) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function containsObject(obj, list) {
