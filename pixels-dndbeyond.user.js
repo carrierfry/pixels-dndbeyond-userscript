@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.1.2
+// @version      0.9.1.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -314,6 +314,8 @@ let lastGameId = 0;
 let isTabletView = false;
 let isMobileView = false;
 let pixelModeMobileTracker = false;
+let swapButtonInterval = null;
+let currentlySwapped = false;
 
 let isEncounterBuilder = false;
 
@@ -597,7 +599,11 @@ function addRollWithPixelButton(contextMenu) {
             e.stopImmediatePropagation();
             console.log("Roll with Pixels clicked");
 
+            let currentTarget = e.currentTarget;
+
             contextMenu.remove();
+            let { adv, dis, crit, target, scope } = determineRollType(currentTarget);
+
 
             let modifier = getModifierFromButton(lastRightClickedButton);
             let dieType = getDieTypeFromButton(lastRightClickedButton);
@@ -605,7 +611,6 @@ function addRollWithPixelButton(contextMenu) {
             let rollType = getRollTypeFromButton(lastRightClickedButton);
             let rollName = getRollNameFromButton(lastRightClickedButton);
 
-            let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
             // Here we already know if we want to roll to our selve or not from the context menu
             // if (isEncounterBuilder) {
             //     nextSelfRoll = true;
@@ -763,7 +768,7 @@ function handleMouseLeave(e) {
             let elClone = element.cloneNode(true);
 
             element.parentNode.replaceChild(elClone, element);
-            elClone.onclick = (e) => {
+            function onClickHandler(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
@@ -775,7 +780,19 @@ function handleMouseLeave(e) {
                 let rollType = getRollTypeFromButton(elClone);
                 let rollName = getRollNameFromButton(elClone);
 
-                if (!checkIfDieTypeIsConnected(dieType) && virtualDice) {
+                if (e.type === "contextmenu") {
+                    elClone.parentNode.replaceChild(element, elClone);
+                    const event = new MouseEvent('contextmenu', {
+                        bubbles: true
+                    });
+                    element.dispatchEvent(event);
+                    swapButtonInterval = setInterval(() => {
+                        checkIfDiceButtonCanBeSwappedAgain(element, elClone);
+                    }, 50);
+                    return;
+                }
+
+                if (!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") {
                     elClone.parentNode.replaceChild(element, elClone);
                     element.click();
                     element.parentNode.replaceChild(elClone, element);
@@ -831,6 +848,9 @@ function handleMouseLeave(e) {
                     }
                 }
             };
+
+            elClone.onclick = onClickHandler;
+            elClone.addEventListener("contextmenu", onClickHandler);
         });
     }
 }
@@ -1608,7 +1628,8 @@ function addPixelModeButton() {
                     let elClone = element.cloneNode(true);
 
                     element.parentNode.replaceChild(elClone, element);
-                    elClone.onclick = (e) => {
+
+                    function onClickHandler(e) {
                         e.preventDefault();
                         e.stopPropagation();
                         e.stopImmediatePropagation();
@@ -1620,7 +1641,19 @@ function addPixelModeButton() {
                         let rollType = getRollTypeFromButton(elClone);
                         let rollName = getRollNameFromButton(elClone);
 
-                        if (!checkIfDieTypeIsConnected(dieType) && virtualDice) {
+                        if (e.type === "contextmenu") {
+                            elClone.parentNode.replaceChild(element, elClone);
+                            const event = new MouseEvent('contextmenu', {
+                                bubbles: true
+                            });
+                            element.dispatchEvent(event);
+                            swapButtonInterval = setInterval(() => {
+                                checkIfDiceButtonCanBeSwappedAgain(element, elClone);
+                            }, 50);
+                            return;
+                        }
+
+                        if (!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") {
                             elClone.parentNode.replaceChild(element, elClone);
                             element.click();
                             element.parentNode.replaceChild(elClone, element);
@@ -1675,6 +1708,8 @@ function addPixelModeButton() {
                             }
                         }
                     };
+                    elClone.onclick = onClickHandler;
+                    elClone.addEventListener("contextmenu", onClickHandler);
                 });
             } else {
                 div.firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
@@ -2491,7 +2526,7 @@ function determineRollType(rollButton) {
     let target = getGameId();
     let scope = "gameId";
 
-    if (!pixelMode) {
+    if (currentlySwapped || !pixelMode) {
 
         let list = undefined;
         if (target !== getCharacterId()) {
@@ -2847,6 +2882,21 @@ function checkIfDieTypeIsConnected(dieType) {
         }
     }
     return false;
+}
+
+function checkIfDiceButtonCanBeSwappedAgain(currentButton, newButton) {
+    let element = document.querySelector(".MuiPaper-root");
+    if (element !== null) {
+        lastRightClickedButton = currentButton;
+        currentlySwapped = true;
+        return false;
+    } else {
+        currentButton.parentNode.replaceChild(newButton, currentButton);
+        clearInterval(swapButtonInterval);
+        lastRightClickedButton = newButton;
+        currentlySwapped = false;
+        return true;
+    }
 }
 
 function containsObject(obj, list) {
