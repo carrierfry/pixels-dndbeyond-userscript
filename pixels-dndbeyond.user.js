@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.1.3
+// @version      0.9.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -319,6 +319,8 @@ let currentlySwapped = false;
 
 let isEncounterBuilder = false;
 
+let alreadyHandledMouseLeave = false;
+
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
         for (const addedNode of mutation.addedNodes) {
@@ -373,6 +375,10 @@ function main() {
         }
     } else {
         isEncounterBuilder = true;
+        if (!checkIfEncounterBuilderIsLoaded()) {
+            setTimeout(main, 500);
+            return;
+        }
     }
 
     if ((!socket || socket.readyState !== 1) && socketRetryCount < 8) {
@@ -391,6 +397,8 @@ function main() {
             }, 1000);
             checkIfBeyond20Installed();
 
+            window.pixels = [];
+
             if (!isEncounterBuilder) {
                 let color;
                 if (isTabletView) {
@@ -406,6 +414,7 @@ function main() {
                 GM_addStyle(`#red-pixel-icon { filter: brightness(30%) sepia(1) saturate(25); }`);
             } else {
                 GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color: #1b9af0 !important; color: white !important; }`);
+                encounterBuilderAddEventListeners();
             }
             addPixelModeButton();
             addPixelsLogoButton();
@@ -492,6 +501,7 @@ function checkForMissingPixelButtons() {
             addPixelsLogoButton();
         }
         if (document.querySelector(".ct-character-header-mobile__group--pixels") === null) {
+            pixelMode = false;
             addPixelModeButton();
         }
     } else if (isTabletView) {
@@ -499,12 +509,14 @@ function checkForMissingPixelButtons() {
             addPixelsLogoButton();
         }
         if (document.querySelector(".ct-character-header-tablet__group--pixels") === null) {
+            pixelMode = false;
             addPixelModeButton();
         }
     } else {
         let forgeButton = document.querySelectorAll(".ct-character-header-desktop__group--builder");
         let pixelModeButton = document.querySelectorAll(".ct-character-header-desktop__group--pixels");
         if (forgeButton.length > 0 && pixelModeButton.length === 0) {
+            pixelMode = false;
             addPixelsLogoButton();
             addPixelModeButton();
         }
@@ -689,14 +701,14 @@ function handleLongHold(e) {
 
 function listenForMouseOverOfNavItems() {
     if (isEncounterBuilder) {
-        let combatants = document.querySelectorAll(".combat-tracker__combatants");
-        combatants.forEach((element) => {
-            element.removeEventListener('mouseenter', handleMouseEnter);
-            element.removeEventListener('mouseleave', handleMouseLeave);
+        // let combatants = document.querySelectorAll(".combat-tracker__combatants");
+        // combatants.forEach((element) => {
+        //     element.removeEventListener('mouseenter', handleMouseEnter);
+        //     element.removeEventListener('mouseleave', handleMouseLeave);
 
-            element.addEventListener('mouseenter', handleMouseEnter);
-            element.addEventListener('mouseleave', handleMouseLeave);
-        });
+        //     element.addEventListener('mouseenter', handleMouseEnter);
+        //     element.addEventListener('mouseleave', handleMouseLeave);
+        // });
     } else {
         let navItems = document.querySelectorAll(".ddbc-tab-list__nav-item");
         navItems.forEach((element) => {
@@ -739,7 +751,7 @@ function listenForQuickNavMenu() {
 }
 
 function handleMouseEnter(e) {
-    if (!isMobileView && !isTabletView) {
+    if (!isMobileView && !isTabletView && !isEncounterBuilder) {
         e.preventDefault();
         e.stopPropagation();
     }
@@ -751,108 +763,141 @@ function handleMouseEnter(e) {
         });
 
         originalDiceClick = [];
+
+        if (isTouchDevice() && !isMobileView && !isTabletView && !isEncounterBuilder) {
+            setTimeout(() => {
+                handleMouseLeave(e);
+                alreadyHandledMouseLeave = true;
+            }, 100);
+        }
     }
 }
 
 function handleMouseLeave(e) {
-    if (!isMobileView && !isTabletView) {
+    if (!isMobileView && !isTabletView && !isEncounterBuilder) {
         e.preventDefault();
         e.stopPropagation();
     }
-    // console.log("Nav item left");
 
-    if (pixelMode) {
-        document.querySelectorAll(".integrated-dice__container").forEach((element) => {
-            originalDiceClick.push(element);
+    if (!alreadyHandledMouseLeave) {
+        if (pixelMode) {
+            document.querySelectorAll(".integrated-dice__container").forEach((element) => {
+                originalDiceClick.push(element);
 
-            let elClone = element.cloneNode(true);
+                let elClone = element.cloneNode(true);
 
-            element.parentNode.replaceChild(elClone, element);
-            function onClickHandler(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                console.log("Dice clicked");
+                element.parentNode.replaceChild(elClone, element);
+                function onClickHandler(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    console.log("Dice clicked");
 
-                let modifier = getModifierFromButton(elClone);
-                let dieType = getDieTypeFromButton(elClone);
-                let amount = getAmountFromButton(elClone);
-                let rollType = getRollTypeFromButton(elClone);
-                let rollName = getRollNameFromButton(elClone);
+                    let modifier = getModifierFromButton(elClone);
+                    let dieType = getDieTypeFromButton(elClone);
+                    let amount = getAmountFromButton(elClone);
+                    let rollType = getRollTypeFromButton(elClone);
+                    let rollName = getRollNameFromButton(elClone);
 
-                if (e.type === "contextmenu") {
-                    elClone.parentNode.replaceChild(element, elClone);
-                    const event = new MouseEvent('contextmenu', {
-                        bubbles: true
-                    });
-                    element.dispatchEvent(event);
-                    swapButtonInterval = setInterval(() => {
-                        checkIfDiceButtonCanBeSwappedAgain(element, elClone);
-                    }, 50);
-                    return;
-                }
+                    if (e.type === "contextmenu") {
+                        elClone.parentNode.replaceChild(element, elClone);
+                        lastRightClickedButton = element;
+                        const event = new MouseEvent('contextmenu', {
+                            bubbles: true
+                        });
+                        element.dispatchEvent(event);
+                        swapButtonInterval = setInterval(() => {
+                            checkIfDiceButtonCanBeSwappedAgain(element, elClone);
+                        }, 50);
+                        return;
+                    }
 
-                if (!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") {
-                    elClone.parentNode.replaceChild(element, elClone);
-                    element.click();
-                    element.parentNode.replaceChild(elClone, element);
-                    return;
-                }
+                    if (!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") {
+                        elClone.parentNode.replaceChild(element, elClone);
+                        element.click();
+                        element.parentNode.replaceChild(elClone, element);
+                        return;
+                    }
 
-                let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
-                if (isEncounterBuilder) {
-                    nextSelfRoll = true;
-                    target = getUserId();
-                    scope = "userId";
-                }
+                    let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
+                    if (isEncounterBuilder) {
+                        nextSelfRoll = true;
+                        target = getUserId();
+                        scope = "userId";
+                    }
 
-                currentlyExpectedRoll = {
-                    "modifier": modifier,
-                    "dieType": dieType,
-                    "amount": amount,
-                    "origAmount": amount,
-                    "advantage": adv,
-                    "disadvantage": dis,
-                    "critical": crit,
-                    "rollType": rollType,
-                    "rollName": rollName,
-                    "target": target,
-                    "scope": scope
-                };
+                    currentlyExpectedRoll = {
+                        "modifier": modifier,
+                        "dieType": dieType,
+                        "amount": amount,
+                        "origAmount": amount,
+                        "advantage": adv,
+                        "disadvantage": dis,
+                        "critical": crit,
+                        "rollType": rollType,
+                        "rollName": rollName,
+                        "target": target,
+                        "scope": scope
+                    };
 
-                if (nextAdvantageRoll && !dis && !crit) {
-                    currentlyExpectedRoll.advantage = true;
-                }
-                if (nextDisadvantageRoll && !adv && !crit) {
-                    currentlyExpectedRoll.disadvantage = true;
-                }
-                if (nextCriticalRoll && !adv && !dis) {
-                    currentlyExpectedRoll.critical = true;
-                }
-                if (nextEveryoneRoll) {
-                    setRollTarget("everyoneButton");
-                }
-                if (nextSelfRoll) {
-                    setRollTarget("selfButton");
-                }
-                if (nextDMRoll) {
-                    setRollTarget("dmButton");
-                }
+                    document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+                    document.querySelector("#everyoneButton").style.backgroundColor = "white";
+                    document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+                    document.querySelector("#advButton").style.backgroundColor = "darkgray";
+                    document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+                    document.querySelector("#critButton").style.backgroundColor = "darkgray";
+
+                    if (nextAdvantageRoll && !dis && !crit) {
+                        currentlyExpectedRoll.advantage = true;
+                    }
+                    if (nextDisadvantageRoll && !adv && !crit) {
+                        currentlyExpectedRoll.disadvantage = true;
+                    }
+                    if (nextCriticalRoll && !adv && !dis) {
+                        currentlyExpectedRoll.critical = true;
+                    }
+                    if (nextEveryoneRoll) {
+                        setRollTarget("everyoneButton");
+                    }
+                    if (nextSelfRoll) {
+                        setRollTarget("selfButton");
+                    }
+                    if (nextDMRoll) {
+                        setRollTarget("dmButton");
+                    }
 
 
-                if (window.pixels !== undefined && pixels.length > 0) {
-                    for (let i = 0; i < pixels.length; i++) {
-                        if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
-                            lightUpPixel(pixels[i], "waitingForRoll");
+                    if (window.pixels !== undefined && pixels.length > 0) {
+                        for (let i = 0; i < pixels.length; i++) {
+                            if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
+                                lightUpPixel(pixels[i], "waitingForRoll");
+                            }
                         }
                     }
-                }
-            };
+                };
 
-            elClone.onclick = onClickHandler;
-            elClone.addEventListener("contextmenu", onClickHandler);
-        });
+                elClone.onclick = onClickHandler;
+                elClone.addEventListener("contextmenu", onClickHandler);
+            });
+        }
+    } else {
+        alreadyHandledMouseLeave = false;
     }
+}
+
+function completelySwapButtons() {
+    handleMouseLeave();
+}
+
+function encounterBuilderAddEventListeners() {
+    let elements = document.querySelectorAll(".combatant-summary__details");
+
+    elements.forEach((element) => {
+        element.addEventListener("click", () => {
+            handleMouseEnter();
+            setTimeout(completelySwapButtons, 100);
+        }, true);
+    });
 }
 
 // generates a random hex string of the given length
@@ -1052,14 +1097,14 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
 function addPixelsLogoButton() {
     let button = document.createElement("li");
     button.className = "mm-nav-item";
-    if (isMobileView || isTabletView) {
+    if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
         button.className = "nav-list__item nav-list__item--connect-to-pixels";
     }
 
     // create a link
     let link = document.createElement("a");
     link.className = "mm-nav-item__label mm-nav-item__label--link";
-    if (isMobileView || isTabletView) {
+    if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
         link.className = "nav-list__item__label";
     }
     // prevent the link from navigating
@@ -1075,7 +1120,7 @@ function addPixelsLogoButton() {
     button.appendChild(link);
     // find the last mm-nav-item and insert after it
     let lastNavItem = document.querySelectorAll(".mm-nav-item");
-    if (isMobileView || isTabletView) {
+    if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
         lastNavItem = document.querySelectorAll(".nav-list__item");
     }
     lastNavItem = lastNavItem[lastNavItem.length - 1];
@@ -1543,6 +1588,7 @@ function addPixelModeButton() {
     } else {
         div.className = "ct-character-header-desktop__group ct-character-header-desktop__group--pixels";
     }
+    div.id = "pixel-mode-button";
 
     div.style = "user-select: none;";
 
@@ -1613,7 +1659,9 @@ function addPixelModeButton() {
             } else if (longPressStart > 0) {
                 pixelModeOnlyOnce = true;
             }
-
+            handleMainStuff();
+        }
+        function handleMainStuff() {
             longPressStart = 0;
 
             pixelMode = !pixelMode;
@@ -1643,6 +1691,7 @@ function addPixelModeButton() {
 
                         if (e.type === "contextmenu") {
                             elClone.parentNode.replaceChild(element, elClone);
+                            lastRightClickedButton = element;
                             const event = new MouseEvent('contextmenu', {
                                 bubbles: true
                             });
@@ -1680,6 +1729,13 @@ function addPixelModeButton() {
                             "target": target,
                             "scope": scope
                         };
+
+                        document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+                        document.querySelector("#everyoneButton").style.backgroundColor = "white";
+                        document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+                        document.querySelector("#advButton").style.backgroundColor = "darkgray";
+                        document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+                        document.querySelector("#critButton").style.backgroundColor = "darkgray";
 
                         if (nextAdvantageRoll && !dis && !crit) {
                             currentlyExpectedRoll.advantage = true;
@@ -1772,6 +1828,7 @@ function addPixelModeButton() {
     });
 
     GM_addStyle(".ct-character-header-mobile__group--pixels { width: 140px; margin-left: calc(100% - 140px); }");
+    handleMainStuff();
 }
 
 function addPixelsInfoBox() {
@@ -1788,7 +1845,7 @@ function addPixelsInfoBox() {
     // add style to the info box (it should be on the left side of the page and be closed by default)
     // it should expand to the right when opened and be roughly 300px wide
 
-    if (isMobileView || isTabletView) {
+    if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
         GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; min-width: 250px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
     } else {
         GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
@@ -1852,7 +1909,7 @@ function addPixelsInfoBox() {
     document.querySelector("body").appendChild(button);
 
     // add style to the button
-    if (isMobileView || isTabletView) {
+    if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
         // make button in top middle
         GM_addStyle(`.pixels-info-box__button { position: fixed; top: 6px; left: calc(50% - 16px); width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
     } else {
@@ -1938,7 +1995,7 @@ function addDiceOverviewBox() {
 
     // add style to the info box (it should be in the middle of the page and be closed by default)
 
-    if (isMobileView || isTabletView) {
+    if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
         GM_addStyle(`.dice-overview-box { position: fixed; top: 50%; left: 50%; width: 95%; height: 95%; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
     } else {
         GM_addStyle(`.dice-overview-box { position: fixed; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
@@ -2875,6 +2932,14 @@ function checkIfCharacterSheetLoaded() {
     }
 }
 
+function checkIfEncounterBuilderIsLoaded() {
+    if (document.querySelector(".combat-tracker-page__content-section") !== null) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 function checkIfDieTypeIsConnected(dieType) {
     for (let i = 0; i < window.pixels.length; i++) {
         if ((window.pixels[i].dieType === dieType || (window.pixels[i].dieType === "d6pipped" && dieType === "d6")) && window.pixels[i].isReady) {
@@ -2892,8 +2957,8 @@ function checkIfDiceButtonCanBeSwappedAgain(currentButton, newButton) {
         return false;
     } else {
         currentButton.parentNode.replaceChild(newButton, currentButton);
-        clearInterval(swapButtonInterval);
         lastRightClickedButton = newButton;
+        clearInterval(swapButtonInterval);
         currentlySwapped = false;
         return true;
     }
@@ -2931,4 +2996,8 @@ function detectOS() {
     }
 
     return os;
+}
+
+function isTouchDevice() {
+    return window.matchMedia("(pointer: coarse)").matches;
 }
