@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.2
+// @version      0.9.2.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -658,6 +658,8 @@ function addRollWithPixelButton(contextMenu) {
                     }
                 }
             }
+
+            document.querySelector(".MuiBackdrop-invisible").click();
         };
 
         contextMenu.firstChild.appendChild(button);
