@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.2.1
+// @version      0.9.2.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -2952,7 +2952,7 @@ function checkIfDieTypeIsConnected(dieType) {
 }
 
 function checkIfDiceButtonCanBeSwappedAgain(currentButton, newButton) {
-    let element = document.querySelector(".MuiPaper-root");
+    let element = document.querySelector(".MuiPaper-root > div");
     if (element !== null) {
         lastRightClickedButton = currentButton;
         currentlySwapped = true;
