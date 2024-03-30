@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.2.2
+// @version      0.9.2.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -156,6 +156,29 @@ const diceTypes = {
             "total": 20,
             "text": "20"
         }
+    },
+    "d100": {
+        "diceNotation": {
+            "set": [{
+                "count": 1,
+                "dieType": "d100",
+                "dice": [{
+                    "dieType": "d100",
+                    "dieValue": 0
+                }],
+                "operation": 0
+            }],
+            "constant": 0
+        },
+        "diceNotationStr": "1d100",
+        "rollType": "roll",
+        "rollKind": "",
+        "result": {
+            "constant": 0,
+            "values": [100],
+            "total": 100,
+            "text": "100"
+        }
     }
 };
 const diceMessageInitial = {
@@ -268,6 +291,16 @@ let gamelogClassLookup = {
     "to hit": "tss-r93asv-RollType",
     "damage": "tss-t7co22-RollType",
     "recharge": "tss-r93asv-RollType"
+};
+
+let svgDiceLookup = {
+    "d4": '<svg width="32" height="32" fill="currentColor" title="D4" class="tss-1qy7qai-DieIcon"><path d="M14.65 3L31 15.15 25.532 29H1L14.65 3zm.208 3.373L3.91 27.228h19.707l-8.76-20.855zm2.14.57l7.917 18.848 3.957-10.026-11.874-8.822z"></path></svg>',
+    "d6": '<svg width="32" height="32" fill="currentColor" title="D6" class="tss-1qy7qai-DieIcon"><path d="M29.5 2.5v18.796L21.523 29.5H2.5V8.931L12.66 2.5H29.5zm-9.233 7.8h-16v17.434h16V10.3zm7.467-5.069l-5.701 4.607V26.44l5.7-5.864V5.231zm-1.616-.965H13.17L6.428 8.534h14.409l5.28-4.268z"></path></svg>',
+    "d8": '<svg width="32" height="32" fill="currentColor" title="D8" class="tss-1qy7qai-DieIcon"><path d="M16 .5l-13 8v13l13 10 13-10v-13l-13-8zm11 15.9L20 5l7 4.5v6.9zM16 2.5l.1.1 11.1 17.9H4.8L15.9 2.6l.1-.1zM12 5L5 16.4V9.5L12 5zM6.9 22.5h18.2L16 29l-9.1-6.5z"></path></svg>',
+    "d10": '<svg width="32" height="32" fill="currentColor" title="D10" class="tss-1qy7qai-DieIcon"><path d="M16 1.5l-16 12 1 6 15 11 15-11 1-6-16-12zm13.7 12.8l-.5 3.2-3.5-1.7-5.4-9 9.4 7.5zM15 21.1v6.1l-11.1-8L7 17.6l8 3.5zm2 0l8-3.5 3.1 1.6L17 27.3v-6.2zm6.6-5.1L16 19.4 8.4 16 16 4.4 23.6 16zM2.3 14.3l9.4-7.5-5.4 9-3.5 1.7-.5-3.2z"></path></svg>',
+    "d12": '<svg width="32" height="32" fill="currentColor" title="D12" class="tss-1qy7qai-DieIcon"><path d="M26 4L16 0 6 4l-5 7v10l6 7 9 4 9-4 6-7V11l-5-7zM3 11.9L7 14l3.7 8.2-3.4 3.4L3 21v-9.1zM13 22l-3.7-7.2L16 9.2l6.7 5.5L19 22h-6zm16-1l-4.3 4.7-3.4-3.4L25 14l4-2.1V21zM17 2.2l7.8 3.6L28 10l-4.5 2.6L17 7.5V2.2zM7.2 5.8L15 2.2v5.2l-6.5 5.1-.5-.1L4 10l3.2-4.2zm2.1 21l3-3h7.5l3 3L16 30l-6.7-3.2z"></path></svg>',
+    "d20": '<svg width="32" height="32" fill="currentColor" title="D20" class="tss-1qy7qai-DieIcon"> <path d="M16 1l14 7.45v15l-1 .596L16 31 2 23.55V8.45L16 1zm5 19.868H10l6 7.45 5-7.45zm-13.3.496L5 22.954l7.1 3.874-4.4-5.464zm16.6-.1l-4.4 5.464 7.1-3.874-2.7-1.59zM4 13.716v7.55l2.7-1.59-2.7-5.96zm24 0l-2.7 5.96.2.1 2.5 1.49v-7.55zM16 9.841l-6 9.04h12l-6-9.04zm-2-.596l-9.6.795 3.7 7.947L14 9.245zm4 0l5.8 8.742 3.7-8.047-9.5-.695zm-1-5.464V7.16l7.4.596L17 3.781zm-2 0L7.6 7.755l7.4-.596V3.78z"> </path> </svg>',
+    "d100": '<svg width="48" height="32" fill="currentColor" title="D100" class="tss-1qy7qai-DieIcon"><path d="M12 5L0 14l.75 4.5L12 26.75l11.25-8.25L24 14 12 5zm10.275 9.6L21.9 17l-2.625-1.275-4.05-6.75 7.05 5.625zM11.25 19.7v4.575l-8.325-6 2.325-1.2 6 2.625zm1.5 0l6-2.625 2.325 1.2-8.325 6.075V19.7zm4.95-3.825l-5.7 2.55-5.7-2.55 5.7-8.7 5.7 8.7zM1.725 14.6l7.05-5.625-4.05 6.75L2.1 17l-.375-2.4zM36 5l-12 9 .75 4.5L36 26.75l11.25-8.25L48 14 36 5zm10.275 9.6L45.9 17l-2.625-1.275-4.05-6.75 7.05 5.625zM35.25 19.7v4.575l-8.325-6 2.325-1.2 6 2.625zm1.5 0l6-2.625 2.325 1.2-8.325 6.075V19.7zm4.95-3.825l-5.7 2.55-5.7-2.55 5.7-8.7 5.7 8.7zM25.725 14.6l7.05-5.625-4.05 6.75L26.1 17l-.375-2.4z"></path></svg>'
 };
 
 let multiRolls = [];
@@ -2798,7 +2831,7 @@ function checkForOtherPeoplesRolls() {
     }
 }
 
-window.appendElementToGameLog = function (json) {
+function appendElementToGameLog(json) {
     let gameLog = document.querySelector("[class*='GameLogEntries']");
 
     let element = document.createElement("li");
@@ -2806,10 +2839,10 @@ window.appendElementToGameLog = function (json) {
 
     if (isEncounterBuilder) {
         element.className = "tss-8-Other-ref tss-17y30t1-GameLogEntry-Other-Flex pixels-added-entry";
-        innerDiv = '<p role="img" class="tss-wyeh8h-Avatar-Flex"> <img class="tss-1e4a2a1-AvatarPortrait" src="AVATAR" alt="CHARACTER_NAME"> </p> <div class="tss-1e6zv06-MessageContainer-Flex"> <div class="tss-dr2its-Line-Flex"><span class="tss-1tj70tb-Sender">CHARACTER_NAME</span></div> <div class="tss-8-Other-ref tss-1qn6fu1-Message-Other-Flex"> <div class="tss-iqf1z5-Container-Flex"> <div class="tss-24rg5g-DiceResultContainer-Flex"> <div class="tss-kucurx-Result"> <div class="tss-3-Other-ref tss-1o65fpw-Line-Title-Other"><span class="tss-cx78hg-Action">WHAT</span>: <span class="CSS_RT">TYPE</span> </div> <div class="tss-16k6xf2-Line-Breakdown"><svg width="32" height="32" fill="currentColor" title="D20" class="tss-1qy7qai-DieIcon"> <path d="M16 1l14 7.45v15l-1 .596L16 31 2 23.55V8.45L16 1zm5 19.868H10l6 7.45 5-7.45zm-13.3.496L5 22.954l7.1 3.874-4.4-5.464zm16.6-.1l-4.4 5.464 7.1-3.874-2.7-1.59zM4 13.716v7.55l2.7-1.59-2.7-5.96zm24 0l-2.7 5.96.2.1 2.5 1.49v-7.55zM16 9.841l-6 9.04h12l-6-9.04zm-2-.596l-9.6.795 3.7 7.947L14 9.245zm4 0l5.8 8.742 3.7-8.047-9.5-.695zm-1-5.464V7.16l7.4.596L17 3.781zm-2 0L7.6 7.755l7.4-.596V3.78z"> </path> </svg><span class="tss-3-Other-ref tss-kzbwsw-Line-Number-Other" title="COMBINED">COMBINED</span> </div> <div class="tss-1wcf5kt-Line-Notation"><span>DICE_NOTATION</span></div> </div><svg width="19" height="70" viewBox="0 0 19 100" class="tss-3-Target-ref tss-1c5trim-DividerResult-Target"> <path fill="currentColor" d="M10 0v30H9V0zm0 70v30H9V70zm9-13H0v-3h19zm0-10H0v-3h19z"></path> </svg> <div class="tss-1jo3bnd-TotalContainer-Flex"> <div class="tss-3-Other-ref tss-3-Target-ref tss-11yjuwm-Total-Other-Target-Flex"><span>VALUE</span></div> </div> </div> <div class="tss-1tqix15-DicePreviewContainer-Flex"> <div class="tss-yuoem4-SetPreviewContainer-Flex"><span class="tss-2auhl5-PreviewThumbnail-DieThumbnailContainer"><span title="2" class="tss-171s1s1-DieThumbnailWrapper"><img class="tss-s4qeha-DieThumbnailImage" src="https://www.dndbeyond.com/dice/images/thumbnails/00101-d20-2.png" alt="d20 roll of 2"></span></span> <div class="tss-xdfhrf-SetPreviewDescriptionContainer"> <div class="tss-1dhkeq7-Divider"></div> <div class="tss-1x8v1yt-SetPreviewActionsContainer-Flex"><span class="tss-15yp4kz-SetPreviewDescription">Rolled with Basic Black: Black</span> </div> </div> </div> <div class="tss-eaaqq4-DieThumbnailsList"></div> </div> </div> </div><time datetime="DATETIME" title="DATETIME_HUMAN" class="tss-1yxh2yy-TimeAgo-TimeAgo">TIME_HUMAN</time> </div>';
+        innerDiv = '<p role="img" class="tss-wyeh8h-Avatar-Flex"> <img class="tss-1e4a2a1-AvatarPortrait" src="AVATAR" alt="CHARACTER_NAME"> </p> <div class="tss-1e6zv06-MessageContainer-Flex"> <div class="tss-dr2its-Line-Flex"><span class="tss-1tj70tb-Sender">CHARACTER_NAME</span></div> <div class="tss-8-Other-ref tss-1qn6fu1-Message-Other-Flex"> <div class="tss-iqf1z5-Container-Flex"> <div class="tss-24rg5g-DiceResultContainer-Flex"> <div class="tss-kucurx-Result"> <div class="tss-3-Other-ref tss-1o65fpw-Line-Title-Other"><span class="tss-cx78hg-Action">WHAT</span>: <span class="CSS_RT">TYPE</span> </div> <div class="tss-16k6xf2-Line-Breakdown">SVG<span class="tss-3-Other-ref tss-kzbwsw-Line-Number-Other" title="COMBINED">COMBINED</span> </div> <div class="tss-1wcf5kt-Line-Notation"><span>DICE_NOTATION</span></div> </div><svg width="19" height="70" viewBox="0 0 19 100" class="tss-3-Target-ref tss-1c5trim-DividerResult-Target"> <path fill="currentColor" d="M10 0v30H9V0zm0 70v30H9V70zm9-13H0v-3h19zm0-10H0v-3h19z"></path> </svg> <div class="tss-1jo3bnd-TotalContainer-Flex">ADV <div class="tss-3-Other-ref tss-3-Target-ref tss-11yjuwm-Total-Other-Target-Flex"><span>VALUE</span></div> </div> </div> <div class="tss-1tqix15-DicePreviewContainer-Flex"> <div class="tss-yuoem4-SetPreviewContainer-Flex"><span class="tss-2auhl5-PreviewThumbnail-DieThumbnailContainer"><span title="COUNTED_VAL" class="tss-171s1s1-DieThumbnailWrapper"><img class="tss-s4qeha-DieThumbnailImage" src="https://www.dndbeyond.com/dice/images/thumbnails/00101-DIE-COUNTED_VAL.png" alt="DIE roll of COUNTED_VAL"></span></span> <div class="tss-xdfhrf-SetPreviewDescriptionContainer"> <div class="tss-1dhkeq7-Divider"></div> <div class="tss-1x8v1yt-SetPreviewActionsContainer-Flex"><span class="tss-15yp4kz-SetPreviewDescription">Rolled with Basic Black: Black</span> </div> </div> </div> <div class="tss-eaaqq4-DieThumbnailsList"></div> </div> </div> </div><time datetime="DATETIME" title="DATETIME_HUMAN" class="tss-1yxh2yy-TimeAgo-TimeAgo">TIME_HUMAN</time> </div>';
     } else {
         element.className = "tss-8-Self-ref tss-1kuahcg-GameLogEntry-Self-Flex pixels-added-entry";
-        innerDiv = '<div class="tss-1e6zv06-MessageContainer-Flex"> <div class="tss-dr2its-Line-Flex"><span class="tss-1tj70tb-Sender">CHARACTER_NAME</span></div> <div class="tss-8-Self-ref tss-cmvb5s-Message-Self-Flex"> <div class="tss-iqf1z5-Container-Flex"> <div class="tss-24rg5g-DiceResultContainer-Flex"> <div class="tss-kucurx-Result"> <div class="tss-3-Self-ref tss-1rj7iab-Line-Title-Self"><span class="tss-cx78hg-Action">WHAT</span>: <span class="CSS_RT">TYPE</span> </div> <div class="tss-16k6xf2-Line-Breakdown"><svg width="32" height="32" fill="currentColor" title="D20" class="tss-1qy7qai-DieIcon"> <path d="M16 1l14 7.45v15l-1 .596L16 31 2 23.55V8.45L16 1zm5 19.868H10l6 7.45 5-7.45zm-13.3.496L5 22.954l7.1 3.874-4.4-5.464zm16.6-.1l-4.4 5.464 7.1-3.874-2.7-1.59zM4 13.716v7.55l2.7-1.59-2.7-5.96zm24 0l-2.7 5.96.2.1 2.5 1.49v-7.55zM16 9.841l-6 9.04h12l-6-9.04zm-2-.596l-9.6.795 3.7 7.947L14 9.245zm4 0l5.8 8.742 3.7-8.047-9.5-.695zm-1-5.464V7.16l7.4.596L17 3.781zm-2 0L7.6 7.755l7.4-.596V3.78z"> </path> </svg><span class="tss-3-Self-ref tss-1nuv2ow-Line-Number-Self" title="COMBINED">COMBINED</span> </div> <div class="tss-1wcf5kt-Line-Notation"><span>DICE_NOTATION</span></div> </div><svg width="19" height="70" viewBox="0 0 19 100" class="tss-1ddr9a0-DividerResult"> <path fill="currentColor" d="M10 0v30H9V0zm0 70v30H9V70zm9-13H0v-3h19zm0-10H0v-3h19z"></path> </svg> <div class="tss-1jo3bnd-TotalContainer-Flex"> <div class="tss-3-Self-ref tss-183k5bv-Total-Self-Flex"><span>VALUE</span></div> </div> </div> <div class="tss-1tqix15-DicePreviewContainer-Flex"> <div class="tss-yuoem4-SetPreviewContainer-Flex"><span class="tss-2auhl5-PreviewThumbnail-DieThumbnailContainer"><span title="2" class="tss-171s1s1-DieThumbnailWrapper"><img class="tss-s4qeha-DieThumbnailImage" src="https://www.dndbeyond.com/dice/images/thumbnails/00101-d20-2.png" alt="d20 roll of 2"></span></span> <div class="tss-xdfhrf-SetPreviewDescriptionContainer"> <div class="tss-1dhkeq7-Divider"></div> <div class="tss-1x8v1yt-SetPreviewActionsContainer-Flex"><span class="tss-15yp4kz-SetPreviewDescription">Rolled with Basic Black: Black</span> </div> </div> </div> <div class="tss-eaaqq4-DieThumbnailsList"></div> </div> </div> </div><time datetime="DATETIME" title="DATETIME_HUMAN" class="tss-1yxh2yy-TimeAgo-TimeAgo">TIME_HUMAN</time> </div>';
+        innerDiv = '<div class="tss-1e6zv06-MessageContainer-Flex"> <div class="tss-dr2its-Line-Flex"><span class="tss-1tj70tb-Sender">CHARACTER_NAME</span></div> <div class="tss-8-Self-ref tss-cmvb5s-Message-Self-Flex"> <div class="tss-iqf1z5-Container-Flex"> <div class="tss-24rg5g-DiceResultContainer-Flex"> <div class="tss-kucurx-Result"> <div class="tss-3-Self-ref tss-1rj7iab-Line-Title-Self"><span class="tss-cx78hg-Action">WHAT</span>: <span class="CSS_RT">TYPE</span> </div> <div class="tss-16k6xf2-Line-Breakdown">SVG<span class="tss-3-Self-ref tss-1nuv2ow-Line-Number-Self" title="COMBINED">COMBINED</span> </div> <div class="tss-1wcf5kt-Line-Notation"><span>DICE_NOTATION</span></div> </div><svg width="19" height="70" viewBox="0 0 19 100" class="tss-1ddr9a0-DividerResult"> <path fill="currentColor" d="M10 0v30H9V0zm0 70v30H9V70zm9-13H0v-3h19zm0-10H0v-3h19z"></path> </svg> <div class="tss-1jo3bnd-TotalContainer-Flex">ADV <div class="tss-3-Self-ref tss-183k5bv-Total-Self-Flex"><span>VALUE</span></div> </div> </div> <div class="tss-1tqix15-DicePreviewContainer-Flex"> <div class="tss-yuoem4-SetPreviewContainer-Flex"><span class="tss-2auhl5-PreviewThumbnail-DieThumbnailContainer"><span title="COUNTED_VAL" class="tss-171s1s1-DieThumbnailWrapper"><img class="tss-s4qeha-DieThumbnailImage" src="https://www.dndbeyond.com/dice/images/thumbnails/00101-DIE-COUNTED_VAL.png" alt="DIE roll of COUNTED_VAL"></span></span> <div class="tss-xdfhrf-SetPreviewDescriptionContainer"> <div class="tss-1dhkeq7-Divider"></div> <div class="tss-1x8v1yt-SetPreviewActionsContainer-Flex"><span class="tss-15yp4kz-SetPreviewDescription">Rolled with Basic Black: Black</span> </div> </div> </div> <div class="tss-eaaqq4-DieThumbnailsList"></div> </div> </div> </div><time datetime="DATETIME" title="DATETIME_HUMAN" class="tss-1yxh2yy-TimeAgo-TimeAgo">TIME_HUMAN</time> </div>';
     }
 
     innerDiv = innerDiv.replaceAll("CHARACTER_NAME", getCharacterName());
@@ -2830,6 +2863,29 @@ window.appendElementToGameLog = function (json) {
     innerDiv = innerDiv.replaceAll("roll", json.data.rolls[0].rollType);
 
     innerDiv = innerDiv.replaceAll("CSS_RT", gamelogClassLookup[json.data.rolls[0].rollType]);
+
+    if (json.data.rolls[0].rollKind === "advantage") {
+        innerDiv = innerDiv.replaceAll("ADV", '<small class="tss-oe8pdp-TotalHeader"><span>+ADV</span></small>');
+    } else if (json.data.rolls[0].rollKind === "disadvantage") {
+        innerDiv = innerDiv.replaceAll("ADV", "<small class='tss-oe8pdp-TotalHeader'><span>-DIS</span></small>");
+    } else {
+        innerDiv = innerDiv.replaceAll("ADV", '');
+    }
+
+    if (json.data.rolls[0].result.values.length > 1) {
+        if (json.data.rolls[0].rollKind === "advantage") {
+            innerDiv = innerDiv.replaceAll("COUNTED_VAL", Math.max(...json.data.rolls[0].result.values));
+        } else if (json.data.rolls[0].rollKind === "disadvantage") {
+            innerDiv = innerDiv.replaceAll("COUNTED_VAL", Math.min(...json.data.rolls[0].result.values));
+        } else {
+            innerDiv = innerDiv.replaceAll("COUNTED_VAL", json.data.rolls[0].result.values[0]);
+        }
+    } else {
+        innerDiv = innerDiv.replaceAll("COUNTED_VAL", json.data.rolls[0].result.values[0]);
+    }
+
+    innerDiv = innerDiv.replaceAll("SVG", svgDiceLookup[json.data.rolls[0].diceNotation.set[0].dieType]);
+    innerDiv = innerDiv.replaceAll("DIE", json.data.rolls[0].diceNotation.set[0].dieType);
 
     element.innerHTML = innerDiv;
 
