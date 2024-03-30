@@ -31,4 +31,6 @@ Now that you have installed the extension, go to [dndbeyond.com](https://dndbeyo
 
 Here you can see the pixels logo at the top center of the page. When you don't see it, that means that something went wrong in the previous steps.
 
+To connect a die, open the burger menu on the top right and select `Connect to Pixels`. Now a popup from the browser should appear, showing you a list of pixels to connect to. Select the pixel die you want to connect to and tap on pair. If you don't see your pixel, make sure that it is awake (when it just sits there for a few minutes it will go into a sleep mode. In that case just move it around a bit and it will wake up). Also make sure that the die isn't connected to any other application (like the official pixels app or any other integration).
+
 Since version `0.9.2` pixel mode is enabled by default when you open a character sheet. This means that you can tap on any of the dice roll buttons and the extension will check if you have at least 1 pixel connected that you can use to make the roll. If yes, the coresponding dice/die will light up yellow, to let you know that you can use them to do the roll. If you don't have the matching pixel connected, the roll will be made like normal with virtual dice.
