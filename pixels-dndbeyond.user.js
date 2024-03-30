@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.2.3
+// @version      0.9.2.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -2881,7 +2881,7 @@ function appendElementToGameLog(json) {
             innerDiv = innerDiv.replaceAll("COUNTED_VAL", json.data.rolls[0].result.values[0]);
         }
     } else {
-        innerDiv = innerDiv.replaceAll("COUNTED_VAL", json.data.rolls[0].result.values[0]);
+        innerDiv = innerDiv.replaceAll("COUNTED_VAL", Math.max(...json.data.rolls[0].result.values));
     }
 
     innerDiv = innerDiv.replaceAll("SVG", svgDiceLookup[json.data.rolls[0].diceNotation.set[0].dieType]);
