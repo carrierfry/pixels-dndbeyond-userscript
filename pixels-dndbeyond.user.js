@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.2.5
+// @version      0.9.2.6
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
 // @match        https://www.dndbeyond.com/combat-tracker/*
 // @match        https://www.dndbeyond.com/encounters/*
 // @match        https://www.dndbeyond.com/my-encounters*
+// @match        https://www.dndbeyond.com/encounter-builder*
 // @icon         https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/chrome_extension/img/red_128x128.png
 // @run-at       document-start
 // @grant        none
@@ -407,7 +408,7 @@ interceptSocket();
 
 
 setTimeout(() => {
-    if (!alreadyNavigated && !(/https:\/\/www.dndbeyond.com\/encounters\/*/.test(window.location.href) || /https:\/\/www.dndbeyond.com\/my-encounters*/.test(window.location.href))) {
+    if (!alreadyNavigated && !(/https:\/\/www.dndbeyond.com\/encounters\/*/.test(window.location.href) || /https:\/\/www.dndbeyond.com\/my-encounters*/.test(window.location.href) || /https:\/\/www.dndbeyond.com\/encounter-builder*/.test(window.location.href))) {
         main();
     }
 }, 500);
