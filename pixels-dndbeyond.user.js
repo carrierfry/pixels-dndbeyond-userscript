@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.2.6
+// @version      0.9.2.7
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
@@ -1645,7 +1645,7 @@ async function handleConnection(pixel) {
     document.querySelector(".pixels-info-box").style.display = "block";
     updateCurrentPixels();
 
-    if (!containsObject(pixel.systemId, systemIds)) {
+    if (!containsObject(pixel.systemId, systemIds) && !!navigator?.bluetooth?.getDevices) {
         systemIds.push(pixel.systemId);
         localStorage.setItem("pixelsSystemIds", JSON.stringify(systemIds));
     }
