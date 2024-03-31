@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.2.4
+// @version      0.9.2.5
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @match        https://www.dndbeyond.com/characters/*
 // @match        https://www.dndbeyond.com/combat-tracker/*
+// @match        https://www.dndbeyond.com/encounters/*
+// @match        https://www.dndbeyond.com/my-encounters*
 // @icon         https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/chrome_extension/img/red_128x128.png
 // @run-at       document-start
 // @grant        none
@@ -16,6 +18,7 @@
 // ==/UserScript==
 
 const { repeatConnect, requestPixel, getPixel, Color } = pixelsWebConnect;
+
 const { createDataSetForAnimation, EditAnimationRainbow } = pixelsEditAnimation;
 
 const diceTypes = {
@@ -181,6 +184,7 @@ const diceTypes = {
         }
     }
 };
+
 const diceMessageInitial = {
     "id": "12345678-1234-1234-1234-1234567890ab",
     "dateTime": "1704476526766",
@@ -354,6 +358,11 @@ let isEncounterBuilder = false;
 
 let alreadyHandledMouseLeave = false;
 
+let doneOnlyOnceStuff = false;
+let alreadyNavigated = false;
+let lastURL = "";
+let currentURL = "";
+
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
         for (const addedNode of mutation.addedNodes) {
@@ -397,7 +406,24 @@ function interceptSocket() {
 interceptSocket();
 
 
-setTimeout(main, 500);
+setTimeout(() => {
+    if (!alreadyNavigated && !(/https:\/\/www.dndbeyond.com\/encounters\/*/.test(window.location.href) || /https:\/\/www.dndbeyond.com\/my-encounters*/.test(window.location.href))) {
+        main();
+    }
+}, 500);
+navigation.addEventListener("navigate", (event) => {
+    lastURL = currentURL;
+    currentURL = event.destination.url;
+    console.log("Navigated");
+    if (checkIfNavigatedToEncounterBuilder()) {
+        alreadyNavigated = true;
+        pixelMode = false;
+        main();
+        console.log("Navigated to Encounter Builder");
+    } else {
+        alreadyNavigated = false;
+    }
+});
 
 // Main function
 function main() {
@@ -430,7 +456,9 @@ function main() {
             }, 1000);
             checkIfBeyond20Installed();
 
-            window.pixels = [];
+            if (!window.pixels) {
+                window.pixels = [];
+            }
 
             if (!isEncounterBuilder) {
                 let color;
@@ -455,16 +483,18 @@ function main() {
             addDiceOverviewBox();
             checkForAutoConnect();
             loadLocalStorage();
-            setInterval(checkForOpenGameLog, 500);
-            setInterval(checkIfCharacterSheetLoaded, 1000);
-            setInterval(checkForMissingPixelButtons, 1000);
-            setInterval(checkForContextMenu, 300);
-            setInterval(checkForTodo, 300);
-            setInterval(listenForRightClicks, 300);
-            setInterval(listenForLongHold, 300)
-            setInterval(listenForMouseOverOfNavItems, 300);
-            setInterval(listenForQuickNavMenu, 20);
-            setInterval(checkForHealthChange, 300);
+            if (!doneOnlyOnceStuff) {
+                setInterval(checkForOpenGameLog, 500);
+                setInterval(checkIfCharacterSheetLoaded, 1000);
+                setInterval(checkForMissingPixelButtons, 1000);
+                setInterval(checkForContextMenu, 300);
+                setInterval(checkForTodo, 300);
+                setInterval(listenForRightClicks, 300);
+                setInterval(listenForLongHold, 300)
+                setInterval(listenForMouseOverOfNavItems, 300);
+                setInterval(listenForQuickNavMenu, 20);
+                setInterval(checkForHealthChange, 300);
+            }
 
             if (isEncounterBuilder) {
                 GM_addStyle(`.tippy-popper[x-placement^=top] .custom-dark-theme .tippy-arrow { border-top-color: #b0b7bd }`);
@@ -477,6 +507,8 @@ function main() {
                 GM_addStyle(`.tippy-arrow, .tippy-roundarrow { position: absolute; width: 0; height: 0; }`);
                 GM_addStyle(`.tippy-tooltip.custom-dark-theme { background-color: #b0b7bd; color: #000 }`);
             }
+
+            doneOnlyOnceStuff = true;
         } else {
             let alertText = "";
             if (detectOS() === "Linux") {
@@ -494,27 +526,29 @@ function main() {
 }
 
 function loadLocalStorage() {
-    if (localStorage.getItem("lightingCheckbox") !== null) {
-        specialLighting = localStorage.getItem("lightingCheckbox") === "true";
-        document.getElementById("diceOption").checked = specialLighting;
-    }
+    if (!doneOnlyOnceStuff) {
+        if (localStorage.getItem("lightingCheckbox") !== null) {
+            specialLighting = localStorage.getItem("lightingCheckbox") === "true";
+            document.getElementById("diceOption").checked = specialLighting;
+        }
 
-    if (localStorage.getItem("beyond20Checkbox") !== null) {
-        beyond20CustomRollNoSend = localStorage.getItem("beyond20Checkbox") === "true";
-        document.getElementById("beyond20CustomRolls").checked = beyond20CustomRollNoSend;
-    }
+        if (localStorage.getItem("beyond20Checkbox") !== null) {
+            beyond20CustomRollNoSend = localStorage.getItem("beyond20Checkbox") === "true";
+            document.getElementById("beyond20CustomRolls").checked = beyond20CustomRollNoSend;
+        }
 
-    if (localStorage.getItem("useCustomDebouncer") !== null) {
-        useCustomDebouncing = localStorage.getItem("useCustomDebouncer") === "true";
-        document.getElementById("useCustomDebouncer").checked = useCustomDebouncing;
-    }
+        if (localStorage.getItem("useCustomDebouncer") !== null) {
+            useCustomDebouncing = localStorage.getItem("useCustomDebouncer") === "true";
+            document.getElementById("useCustomDebouncer").checked = useCustomDebouncing;
+        }
 
-    if (localStorage.getItem("pixelModeOnlyExistingDice") !== null) {
-        virtualDice = localStorage.getItem("pixelModeOnlyExistingDice") === "true";
-        document.getElementById("pixelModeOnlyExistingDice").checked = virtualDice;
-    }
+        if (localStorage.getItem("pixelModeOnlyExistingDice") !== null) {
+            virtualDice = localStorage.getItem("pixelModeOnlyExistingDice") === "true";
+            document.getElementById("pixelModeOnlyExistingDice").checked = virtualDice;
+        }
 
-    localStorage.setItem("pixelModeOnlyExistingDice", virtualDice);
+        localStorage.setItem("pixelModeOnlyExistingDice", virtualDice);
+    }
 }
 
 function checkIfBeyond20Installed() {
@@ -1130,36 +1164,38 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
 
 // Adds a button that lets you connect to Pixels
 function addPixelsLogoButton() {
-    let button = document.createElement("li");
-    button.className = "mm-nav-item";
-    if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
-        button.className = "nav-list__item nav-list__item--connect-to-pixels";
-    }
+    if (!doneOnlyOnceStuff) {
+        let button = document.createElement("li");
+        button.className = "mm-nav-item";
+        if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+            button.className = "nav-list__item nav-list__item--connect-to-pixels";
+        }
 
-    // create a link
-    let link = document.createElement("a");
-    link.className = "mm-nav-item__label mm-nav-item__label--link";
-    if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
-        link.className = "nav-list__item__label";
-    }
-    // prevent the link from navigating
-    link.href = "#";
-    // prevent default click behavior
-    link.innerText = "Connect to Pixels";
-    link.onclick = (e) => {
-        e.preventDefault();
-        console.log("Pixels link clicked");
+        // create a link
+        let link = document.createElement("a");
+        link.className = "mm-nav-item__label mm-nav-item__label--link";
+        if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+            link.className = "nav-list__item__label";
+        }
+        // prevent the link from navigating
+        link.href = "#";
+        // prevent default click behavior
+        link.innerText = "Connect to Pixels";
+        link.onclick = (e) => {
+            e.preventDefault();
+            console.log("Pixels link clicked");
 
-        requestMyPixel();
-    };
-    button.appendChild(link);
-    // find the last mm-nav-item and insert after it
-    let lastNavItem = document.querySelectorAll(".mm-nav-item");
-    if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
-        lastNavItem = document.querySelectorAll(".nav-list__item");
+            requestMyPixel();
+        };
+        button.appendChild(link);
+        // find the last mm-nav-item and insert after it
+        let lastNavItem = document.querySelectorAll(".mm-nav-item");
+        if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+            lastNavItem = document.querySelectorAll(".nav-list__item");
+        }
+        lastNavItem = lastNavItem[lastNavItem.length - 1];
+        lastNavItem.parentNode.insertBefore(button, lastNavItem.nextSibling);
     }
-    lastNavItem = lastNavItem[lastNavItem.length - 1];
-    lastNavItem.parentNode.insertBefore(button, lastNavItem.nextSibling);
 }
 
 // The following 5 functions get different information from DOM elements and the URL
@@ -1486,14 +1522,16 @@ async function rainbowPixel(pixel) {
 }
 
 async function checkForAutoConnect() {
-    if (!!navigator?.bluetooth?.getDevices) {
-        let systemIds = JSON.parse(localStorage.getItem("pixelsSystemIds"));
-        if (systemIds !== null) {
-            for (let i = 0; i < systemIds.length; i++) {
-                let pixel = await getPixel(systemIds[i]);
+    if (!doneOnlyOnceStuff) {
+        if (!!navigator?.bluetooth?.getDevices) {
+            let systemIds = JSON.parse(localStorage.getItem("pixelsSystemIds"));
+            if (systemIds !== null) {
+                for (let i = 0; i < systemIds.length; i++) {
+                    let pixel = await getPixel(systemIds[i]);
 
-                if (pixel !== undefined) {
-                    handleConnection(pixel);
+                    if (pixel !== undefined) {
+                        handleConnection(pixel);
+                    }
                 }
             }
         }
@@ -3020,6 +3058,13 @@ function checkIfDiceButtonCanBeSwappedAgain(currentButton, newButton) {
         currentlySwapped = false;
         return true;
     }
+}
+
+function checkIfNavigatedToEncounterBuilder() {
+    if (/https:\/\/www.dndbeyond.com\/combat-tracker\/*/.test(currentURL)) {
+        return true;
+    }
+    return false;
 }
 
 function containsObject(obj, list) {
