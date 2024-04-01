@@ -2,11 +2,15 @@
     "manifest_version": 3,
     "name": "Pixels DnDBeyond Integration",
     "description": "Allows you to use pixel dice in DnDBeyond",
-    "version": "0.8.5.5",
+    "version": "0.9.2.7",
     "content_scripts": [
         {
             "matches": [
-                "https://www.dndbeyond.com/characters/*"
+                "https://www.dndbeyond.com/characters/*",
+                "https://www.dndbeyond.com/combat-tracker/*",
+                "https://www.dndbeyond.com/encounters/*",
+                "https://www.dndbeyond.com/my-encounters*",
+                "https://www.dndbeyond.com/encounter-builder*"
             ],
             "js": [
                 "lib/pixels-web-connect_1.2.0.js",
