@@ -4,6 +4,7 @@
 // @version      0.9.2.7
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
+// @license      MIT
 // @match        https://www.dndbeyond.com/characters/*
 // @match        https://www.dndbeyond.com/combat-tracker/*
 // @match        https://www.dndbeyond.com/encounters/*
@@ -183,7 +184,7 @@ const diceTypes = {
             "total": 100,
             "text": "100"
         }
-    }
+    },
 };
 
 const diceMessageInitial = {
