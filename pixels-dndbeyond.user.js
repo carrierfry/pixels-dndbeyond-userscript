@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.2.7
+// @version      0.9.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -15,13 +15,13 @@
 // @grant        none
 // @updateURL    https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js
 // @downloadURL  https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js
-// @require      https://unpkg.com/@systemic-games/pixels-web-connect@1.2.0/dist/umd/index.js
-// @require      https://unpkg.com/@systemic-games/pixels-edit-animation@1.2.0/dist/umd/index.js
+// @require      https://unpkg.com/@systemic-games/pixels-web-connect@1.2.2/dist/umd/index.js
+// @require      https://unpkg.com/@systemic-games/pixels-edit-animation@1.2.2/dist/umd/index.js
 // ==/UserScript==
 
 const { repeatConnect, requestPixel, getPixel, Color } = pixelsWebConnect;
 
-const { createDataSetForAnimation, EditAnimationRainbow } = pixelsEditAnimation;
+const { createDataSetForAnimation, EditAnimationRainbow, AnimationFlagsValues } = pixelsEditAnimation;
 
 const diceTypes = {
     "d4": {
@@ -1515,7 +1515,8 @@ async function rainbowPixel(pixel) {
             duration: 3,
             count: 2,
             fade: 0.5,
-            intensity: 0.3
+            intensity: 0.3,
+            animFlags: AnimationFlagsValues.traveling | AnimationFlagsValues.useLedIndices
         })
     );
 
