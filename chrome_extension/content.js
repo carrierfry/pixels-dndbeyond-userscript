@@ -1,6 +1,6 @@
 const { repeatConnect, requestPixel, getPixel, Color } = pixelsWebConnect;
 
-const { createDataSetForAnimation, EditAnimationRainbow } = pixelsEditAnimation;
+const { createDataSetForAnimation, EditAnimationRainbow, AnimationFlagsValues } = pixelsEditAnimation;
 
 const diceTypes = {
     "d4": {
@@ -1494,7 +1494,8 @@ async function rainbowPixel(pixel) {
             duration: 3,
             count: 2,
             fade: 0.5,
-            intensity: 0.3
+            intensity: 0.3,
+            animFlags: AnimationFlagsValues.traveling | AnimationFlagsValues.useLedIndices
         })
     );
 

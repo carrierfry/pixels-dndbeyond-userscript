@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "Pixels DnDBeyond Integration",
     "description": "Allows you to use pixel dice in DnDBeyond",
-    "version": "0.9.2.7",
+    "version": "0.9.3",
     "content_scripts": [
         {
             "matches": [
@@ -13,8 +13,8 @@
                 "https://www.dndbeyond.com/encounter-builder*"
             ],
             "js": [
-                "lib/pixels-web-connect_1.2.0.js",
-                "lib/pixels-edit-animation_1.2.0.js",
+                "lib/pixels-web-connect_1.2.2.js",
+                "lib/pixels-edit-animation_1.2.2.js",
                 "content.js"
             ],
             "run_at": "document_start",
