@@ -344,6 +344,8 @@ let alreadyNavigated = false;
 let lastURL = "";
 let currentURL = "";
 
+let requireTabOpen = false;
+
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
         for (const addedNode of mutation.addedNodes) {
@@ -528,7 +530,12 @@ function loadLocalStorage() {
             document.getElementById("pixelModeOnlyExistingDice").checked = virtualDice;
         }
 
-        localStorage.setItem("pixelModeOnlyExistingDice", virtualDice);
+        if (localStorage.getItem("ignoreRollsWhenTabInactive") !== null) {
+            requireTabOpen = localStorage.getItem("ignoreRollsWhenTabInactive") === "true";
+            document.getElementById("ignoreRollsWhenTabInactive").checked = requireTabOpen;
+        }
+
+        //localStorage.setItem("pixelModeOnlyExistingDice", virtualDice);
     }
 }
 
@@ -862,7 +869,7 @@ function handleMouseLeave(e) {
                         return;
                     }
 
-                    if (!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") {
+                    if ((!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") || (dieType === "d20" && isRollFlat(elClone))) {
                         elClone.parentNode.replaceChild(element, elClone);
                         element.click();
                         element.parentNode.replaceChild(elClone, element);
@@ -1303,6 +1310,10 @@ function rollDice(dieType, value) {
     let multiRollComplete = false;
     let amount = 1;
     let forcedMultiRoll = false;
+
+    if (requireTabOpen && document.hidden) {
+        return;
+    }
 
     if (dieType === "d20") {
         last2D20Rolls.push(value);
@@ -1757,7 +1768,7 @@ function addPixelModeButton() {
                             return;
                         }
 
-                        if (!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") {
+                        if ((!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") || (dieType === "d20" && isRollFlat(elClone))) {
                             elClone.parentNode.replaceChild(element, elClone);
                             element.click();
                             element.parentNode.replaceChild(elClone, element);
@@ -2017,7 +2028,7 @@ function addDiceOverviewBox() {
     div.className = "dice-overview-box";
 
     // the box should have a title and a list of all dice that are currently connected
-    let innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div> <div class="dice-overview-box__content__settings"> <input type="checkbox" id="diceOption" name="diceOption"><label for="diceOption"> Light up dice when other characters score a natural 1 or 20</label><br> <input type="checkbox" id="beyond20CustomRolls" name="beyond20CustomRolls"><label for="beyond20CustomRolls"> Do not send custom rolls to Roll20 (only relevant when Beyond20 is installed)</label><br> <input type="checkbox" id="pixelModeOnlyExistingDice" name="pixelModeOnlyExistingDice" checked><label for="pixelModeOnlyExistingDice"> When using pixel mode, use virtual dice when no Pixel die of a type is connected</label><br> <input type="checkbox" id="useCustomDebouncer" name="useCustomDebouncer"><label for="useCustomDebouncer"> EXPERIMENTAL: Make false positives when rolling less likely</label> </div> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
+    let innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div> <div class="dice-overview-box__content__settings"> <input type="checkbox" id="diceOption" name="diceOption"><label for="diceOption"> Light up dice when other characters score a natural 1 or 20</label><br> <input type="checkbox" id="beyond20CustomRolls" name="beyond20CustomRolls"><label for="beyond20CustomRolls"> Do not send custom rolls to Roll20 (only relevant when Beyond20 is installed)</label><br> <input type="checkbox" id="pixelModeOnlyExistingDice" name="pixelModeOnlyExistingDice" checked><label for="pixelModeOnlyExistingDice"> When using pixel mode, use virtual dice when no Pixel die of a type is connected</label><br> <input type="checkbox" id="useCustomDebouncer" name="useCustomDebouncer"><label for="useCustomDebouncer"> EXPERIMENTAL: Make false positives when rolling less likely</label><br> <input type="checkbox" id="ignoreRollsWhenTabInactive" name="ignoreRollsWhenTabInactive"><label for="ignoreRollsWhenTabInactive"> Ignore rolls when the tab is not open</label> </div> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
 
     if (!!navigator?.bluetooth?.getDevices) {
         innerHTML = innerHTML.replaceAll('AUTO_STATUS', '<span class="pixelsAutoReconnectStatus" style="color: lime">enabled</span>');
@@ -2103,6 +2114,12 @@ function addDiceOverviewBox() {
     virtualDiceCheckbox.onclick = (e) => {
         virtualDice = virtualDiceCheckbox.checked;
         localStorage.setItem("pixelModeOnlyExistingDice", virtualDice);
+    };
+
+    let ignoreRollsWhenTabInactive = document.querySelector("#ignoreRollsWhenTabInactive");
+    ignoreRollsWhenTabInactive.onclick = (e) => {
+        requireTabOpen = ignoreRollsWhenTabInactive.checked;
+        localStorage.setItem("ignoreRollsWhenTabInactive", requireTabOpen);
     };
 
     // add style to the button (it should be in the top right corner of the box)
@@ -2192,8 +2209,15 @@ function addDieToTable(pixel) {
 }
 
 function displayWhatUserNeedsToDo(text = undefined) {
+    let nothingToDo = false;
     if (text === undefined) {
         text = "You currently have nothing to do!";
+        nothingToDo = true;
+    }
+
+    if (!nothingToDo) {
+        let cancelSpan = " ( <span onclick='cancelCurrentRoll()' style='cursor: pointer; color: lightcoral;'>cancel</span> )";
+        text += cancelSpan;
     }
 
     document.querySelector(".todo_text").innerHTML = text;
@@ -3041,6 +3065,28 @@ function checkIfDiceButtonCanBeSwappedAgain(currentButton, newButton) {
         return true;
     }
 }
+
+function isRollFlat(element) {
+    if (element.innerHTML.includes("+")) {
+        return false;
+    } else {
+        return true;
+    }
+}
+
+function cancelCurrentRoll() {
+    currentlyExpectedRoll = {};
+
+    // uncolor buttons
+    document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
+    document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+    document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+
+    document.querySelector("#advButton").style.backgroundColor = "darkgray";
+    document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+    document.querySelector("#critButton").style.backgroundColor = "darkgray";
+}
+window.cancelCurrentRoll = cancelCurrentRoll;
 
 function checkIfNavigatedToEncounterBuilder() {
     if (/https:\/\/www.dndbeyond.com\/combat-tracker\/*/.test(currentURL)) {
