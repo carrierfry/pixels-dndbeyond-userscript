@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.3.1
+// @version      0.9.3.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -890,7 +890,7 @@ function handleMouseLeave(e) {
                         return;
                     }
 
-                    if (!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") {
+                    if ((!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") || (dieType === "d20" && isRollFlat(elClone))) {
                         elClone.parentNode.replaceChild(element, elClone);
                         element.click();
                         element.parentNode.replaceChild(elClone, element);
@@ -1789,7 +1789,7 @@ function addPixelModeButton() {
                             return;
                         }
 
-                        if (!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") {
+                        if ((!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") || (dieType === "d20" && isRollFlat(elClone))) {
                             elClone.parentNode.replaceChild(element, elClone);
                             element.click();
                             element.parentNode.replaceChild(elClone, element);
@@ -3083,6 +3083,14 @@ function checkIfDiceButtonCanBeSwappedAgain(currentButton, newButton) {
         lastRightClickedButton = newButton;
         clearInterval(swapButtonInterval);
         currentlySwapped = false;
+        return true;
+    }
+}
+
+function isRollFlat(element) {
+    if (element.innerHTML.includes("+")) {
+        return false;
+    } else {
         return true;
     }
 }
