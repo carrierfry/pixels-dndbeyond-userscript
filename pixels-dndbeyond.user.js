@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.3.2
+// @version      0.9.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -366,6 +366,7 @@ let lastURL = "";
 let currentURL = "";
 
 let requireTabOpen = false;
+let speakOnRoll = false;
 
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
@@ -554,6 +555,11 @@ function loadLocalStorage() {
         if (localStorage.getItem("ignoreRollsWhenTabInactive") !== null) {
             requireTabOpen = localStorage.getItem("ignoreRollsWhenTabInactive") === "true";
             document.getElementById("ignoreRollsWhenTabInactive").checked = requireTabOpen;
+        }
+
+        if (localStorage.getItem("speakOnRoll") !== null) {
+            speakOnRoll = localStorage.getItem("speakOnRoll") === "true";
+            document.getElementById("speakOnRoll").checked = speakOnRoll;
         }
 
         //localStorage.setItem("pixelModeOnlyExistingDice", virtualDice);
@@ -1428,6 +1434,10 @@ function rollDice(dieType, value) {
                 nextDmgRollIsCrit = true;
             }
 
+            if (speakOnRoll) {
+                speakRoll(rolledJson);
+            }
+
             createToast(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], modifier, rolledJson.data.rolls[0].diceNotationStr);
             // displayDieRoll(dieType, value, modifier);
             // appendElementToGameLog(rolledJson);
@@ -2049,7 +2059,20 @@ function addDiceOverviewBox() {
     div.className = "dice-overview-box";
 
     // the box should have a title and a list of all dice that are currently connected
-    let innerHTML = '<div class="dice-overview-box__content"> <div class="dice-overview-box__content__title">Dice Overview</div> <button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button> <div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div> <div class="dice-overview-box__content__settings"> <input type="checkbox" id="diceOption" name="diceOption"><label for="diceOption"> Light up dice when other characters score a natural 1 or 20</label><br> <input type="checkbox" id="beyond20CustomRolls" name="beyond20CustomRolls"><label for="beyond20CustomRolls"> Do not send custom rolls to Roll20 (only relevant when Beyond20 is installed)</label><br> <input type="checkbox" id="pixelModeOnlyExistingDice" name="pixelModeOnlyExistingDice" checked><label for="pixelModeOnlyExistingDice"> When using pixel mode, use virtual dice when no Pixel die of a type is connected</label><br> <input type="checkbox" id="useCustomDebouncer" name="useCustomDebouncer"><label for="useCustomDebouncer"> EXPERIMENTAL: Make false positives when rolling less likely</label><br> <input type="checkbox" id="ignoreRollsWhenTabInactive" name="ignoreRollsWhenTabInactive"><label for="ignoreRollsWhenTabInactive"> Ignore rolls when the tab is not open</label> </div> <div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
+    let innerHTML = '<div class="dice-overview-box__content">';
+    innerHTML += '<div class="dice-overview-box__content__title">Dice Overview</div>';
+    innerHTML += '<button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button>';
+    innerHTML += '<div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div>';
+    innerHTML += '<div class="dice-overview-box__content__settings">';
+    innerHTML += '<div class="dice-overview-box__content__settings__checkboxes">';
+    innerHTML += '<input type="checkbox" id="diceOption" name="diceOption"><label for="diceOption"> Light up dice when other characters score a natural 1 or 20</label><br>';
+    innerHTML += '<input type="checkbox" id="beyond20CustomRolls" name="beyond20CustomRolls"><label for="beyond20CustomRolls"> Do not send custom rolls to Roll20 (only relevant when Beyond20 is installed)</label><br>';
+    innerHTML += '<input type="checkbox" id="pixelModeOnlyExistingDice" name="pixelModeOnlyExistingDice" checked><label for="pixelModeOnlyExistingDice"> When using pixel mode, use virtual dice when no Pixel die of a type is connected</label><br>';
+    innerHTML += '<input type="checkbox" id="useCustomDebouncer" name="useCustomDebouncer"><label for="useCustomDebouncer"> EXPERIMENTAL: Make false positives when rolling less likely</label><br>';
+    innerHTML += '<input type="checkbox" id="ignoreRollsWhenTabInactive" name="ignoreRollsWhenTabInactive"><label for="ignoreRollsWhenTabInactive"> Ignore rolls when the tab is not open</label><br>';
+    innerHTML += '<input type="checkbox" id="speakOnRoll" name="speakOnRoll"><label for="speakOnRoll"> Accessibility: Speak out results on roll with pixels dice</label><br>';
+    innerHTML += '</div></div>';
+    innerHTML += '<div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
 
     if (!!navigator?.bluetooth?.getDevices) {
         innerHTML = innerHTML.replaceAll('AUTO_STATUS', '<span class="pixelsAutoReconnectStatus" style="color: lime">enabled</span>');
@@ -2091,7 +2114,7 @@ function addDiceOverviewBox() {
     GM_addStyle(`.dice-overview-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__features { position: absolute; top: 5%; left: 0%; width: 100%; height: 10%; font-size: 1em; text-align: center; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__settings { position: absolute; top: 10%; left: 0%; width: 100%; height: 10%; font-size: 1em; text-align: left; color: white; }`);
-    GM_addStyle(`.dice-overview-box__content__table { position: absolute; top: 25%; left: 0%; width: 100%; height: 90%; }`);
+    GM_addStyle(`.dice-overview-box__content__table { position: absolute; top: 30%; left: 0%; width: 100%; height: 90%; }`);
     GM_addStyle(`.dice-overview-box__content__table table { width: 100%; color: white; }`);
     GM_addStyle(`.dice-overview-box__content__table table, th, td { border: 1px solid white; }`);
     // make text in table centered
@@ -2141,6 +2164,12 @@ function addDiceOverviewBox() {
     ignoreRollsWhenTabInactive.onclick = (e) => {
         requireTabOpen = ignoreRollsWhenTabInactive.checked;
         localStorage.setItem("ignoreRollsWhenTabInactive", requireTabOpen);
+    };
+
+    let speakOnRollCheckbox = document.querySelector("#speakOnRoll");
+    speakOnRollCheckbox.onclick = (e) => {
+        speakOnRoll = speakOnRollCheckbox.checked;
+        localStorage.setItem("speakOnRoll", speakOnRoll);
     };
 
     // add style to the button (it should be in the top right corner of the box)
@@ -3087,8 +3116,34 @@ function checkIfDiceButtonCanBeSwappedAgain(currentButton, newButton) {
     }
 }
 
+function speakRoll(rolledJson) {
+    let ssu = new SpeechSynthesisUtterance();
+    let text = "";
+    let modifiedOperator = rolledJson.data.rolls[0].result.text.replaceAll("+-", " minus ");
+    modifiedOperator = modifiedOperator.replaceAll("+", " + ");
+    modifiedOperator = modifiedOperator.replaceAll("-", " minus ");
+
+    if (rolledJson.data.rolls[0].rollKind !== "") {
+        text += rolledJson.data.rolls[0].rollKind + ": ";
+    }
+    text += modifiedOperator;
+
+    if (rolledJson.data.rolls[0].result.text === "" + rolledJson.data.rolls[0].result.total) {
+        text = rolledJson.data.rolls[0].result.total
+    } else {
+        text += " = " + rolledJson.data.rolls[0].result.total;
+    }
+
+    ssu.text = text;
+    ssu.volume = 1;
+    ssu.rate = 0.8;
+    ssu.pitch = 1;
+    ssu.lang = "en-US";
+    window.speechSynthesis.speak(ssu);
+}
+
 function isRollFlat(element) {
-    if (element.innerHTML.includes("+")) {
+    if (element.innerText.includes("+") || element.innerText.includes("-") || element.innerText.includes("(")) {
         return false;
     } else {
         return true;
