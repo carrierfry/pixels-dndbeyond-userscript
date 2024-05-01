@@ -773,7 +773,8 @@ function listenForMouseOverOfNavItems() {
         //     element.addEventListener('mouseleave', handleMouseLeave);
         // });
     } else {
-        let navItems = document.querySelectorAll(".ddbc-tab-list__nav-item");
+        // let navItems = document.querySelectorAll(".ddbc-tab-list__nav-item");
+        let navItems = document.querySelectorAll(".styles_tabButton__wvSLf"); // DnDBeyond: Let's rename this perfectly fine class from "ddbc-tab-list__nav-item" to something stupid like "styles_tabButton__wvSLf", why not?
         navItems.forEach((element) => {
             element.removeEventListener('mouseenter', handleMouseEnter);
             element.removeEventListener('mouseleave', handleMouseLeave);
@@ -844,6 +845,9 @@ function handleMouseLeave(e) {
 
     if (!alreadyHandledMouseLeave) {
         if (pixelMode) {
+
+            originalDiceClick = [];
+
             document.querySelectorAll(".integrated-dice__container").forEach((element) => {
                 originalDiceClick.push(element);
 
