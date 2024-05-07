@@ -260,6 +260,75 @@ const diceMessageRolled = {
     "messageTarget": "1234567"
 };
 
+const beyond20Roll = {
+    "action": "roll",
+    "character": {
+        "name": "Username",
+        "source": "D&D Beyond",
+        "avatar": "URL to Avatar",
+        "id": "character ID",
+        "type": "Character",
+        "url": "https://www.dndbeyond.com/characters/" + "character ID",
+        "settings": {
+            "custom-roll-dice": ""
+        }
+    },
+    "type": "ability",
+    "roll": "1d20+2",
+    "ability": "INT",
+    "advantage": 0,
+    "whisper": 0,
+    "modifier": "+" + "2",
+    "name": "Intelligence",
+    "sendMessage": true,
+    // "initiative": "+2",
+}
+
+const beyond20RenderedRoll = {
+    "action": "rendered-roll",
+    "attack_rolls": [
+        {
+            "formula": "1d20+2",
+            "parts": [
+                {
+                    "total": 5, // total without modifiers!
+                    "formula": "1d20", // formula without modifiers
+                    "rolls": [
+                        {
+                            "roll": 8,
+                        }
+                    ],
+                    "amount": 1, // how many dice are rolled
+                    "faces": 20, // how many faces does the die have
+                    "modifiers": "" // always empty
+                },
+                "+", // modifier + or -
+                5 // the pure modifier without sign
+            ],
+            "fail-limit": null,
+            "critical-limit": null,
+            "critical-failure": false,
+            "critical-success": false,
+            "discarded": false,
+            "type": "ability-check",
+            "total": "10"
+        }
+    ],
+    "attributes": {},
+    "character": "character Name",
+    "damage_rolls": [],
+    "description": null,
+    "html": "",
+    "request": "instead link to the roll object",
+    "open": false,
+    "play_sound": true,
+    "roll_info": [],
+    "source": null,
+    "title": "Intelligence (+2)",
+    "total_damages": {},
+    "whisper": 0
+}
+
 const toDoLookup = {
     "d4": "You need to roll x d4!",
     "d6": "You need to roll x d6!",
@@ -286,6 +355,15 @@ let svgDiceLookup = {
     "d12": '<svg width="32" height="32" fill="currentColor" title="D12" class="tss-1qy7qai-DieIcon"><path d="M26 4L16 0 6 4l-5 7v10l6 7 9 4 9-4 6-7V11l-5-7zM3 11.9L7 14l3.7 8.2-3.4 3.4L3 21v-9.1zM13 22l-3.7-7.2L16 9.2l6.7 5.5L19 22h-6zm16-1l-4.3 4.7-3.4-3.4L25 14l4-2.1V21zM17 2.2l7.8 3.6L28 10l-4.5 2.6L17 7.5V2.2zM7.2 5.8L15 2.2v5.2l-6.5 5.1-.5-.1L4 10l3.2-4.2zm2.1 21l3-3h7.5l3 3L16 30l-6.7-3.2z"></path></svg>',
     "d20": '<svg width="32" height="32" fill="currentColor" title="D20" class="tss-1qy7qai-DieIcon"> <path d="M16 1l14 7.45v15l-1 .596L16 31 2 23.55V8.45L16 1zm5 19.868H10l6 7.45 5-7.45zm-13.3.496L5 22.954l7.1 3.874-4.4-5.464zm16.6-.1l-4.4 5.464 7.1-3.874-2.7-1.59zM4 13.716v7.55l2.7-1.59-2.7-5.96zm24 0l-2.7 5.96.2.1 2.5 1.49v-7.55zM16 9.841l-6 9.04h12l-6-9.04zm-2-.596l-9.6.795 3.7 7.947L14 9.245zm4 0l5.8 8.742 3.7-8.047-9.5-.695zm-1-5.464V7.16l7.4.596L17 3.781zm-2 0L7.6 7.755l7.4-.596V3.78z"> </path> </svg>',
     "d100": '<svg width="48" height="32" fill="currentColor" title="D100" class="tss-1qy7qai-DieIcon"><path d="M12 5L0 14l.75 4.5L12 26.75l11.25-8.25L24 14 12 5zm10.275 9.6L21.9 17l-2.625-1.275-4.05-6.75 7.05 5.625zM11.25 19.7v4.575l-8.325-6 2.325-1.2 6 2.625zm1.5 0l6-2.625 2.325 1.2-8.325 6.075V19.7zm4.95-3.825l-5.7 2.55-5.7-2.55 5.7-8.7 5.7 8.7zM1.725 14.6l7.05-5.625-4.05 6.75L2.1 17l-.375-2.4zM36 5l-12 9 .75 4.5L36 26.75l11.25-8.25L48 14 36 5zm10.275 9.6L45.9 17l-2.625-1.275-4.05-6.75 7.05 5.625zM35.25 19.7v4.575l-8.325-6 2.325-1.2 6 2.625zm1.5 0l6-2.625 2.325 1.2-8.325 6.075V19.7zm4.95-3.825l-5.7 2.55-5.7-2.55 5.7-8.7 5.7 8.7zM25.725 14.6l7.05-5.625-4.05 6.75L26.1 17l-.375-2.4z"></path></svg>'
+};
+
+let abilityNameLookup = {
+    "str": "Strength",
+    "dex": "Dexterity",
+    "con": "Constitution",
+    "int": "Intelligence",
+    "wis": "Wisdom",
+    "cha": "Charisma"
 };
 
 let multiRolls = [];
@@ -1422,6 +1500,9 @@ function rollDice(dieType, value) {
             }
 
             createToast(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], modifier, rolledJson.data.rolls[0].diceNotationStr);
+
+            //sendRollToBeyond20(rolledJson);
+
             // displayDieRoll(dieType, value, modifier);
             // appendElementToGameLog(rolledJson);
             rolledJsonArray.push(rolledJson);
@@ -2343,7 +2424,8 @@ function getModifierFromButton(button) {
 
         modifier = button.firstChild.getAttribute("aria-label");
         if (modifier === null) {
-            modifier = button.firstChild.firstChild.innerHTML;
+            // modifier = button.firstChild.firstChild.innerHTML;
+            modifier = button.firstChild.innerText.replace("\n", "");
 
             if (modifier === undefined) {
                 modifier = button.firstChild.innerHTML;
@@ -3105,6 +3187,7 @@ function speakRoll(rolledJson) {
     let modifiedOperator = rolledJson.data.rolls[0].result.text.replaceAll("+-", " minus ");
     modifiedOperator = modifiedOperator.replaceAll("+", " + ");
     modifiedOperator = modifiedOperator.replaceAll("-", " minus ");
+    modifiedOperator = modifiedOperator.replaceAll(",", " , ");
 
     if (rolledJson.data.rolls[0].rollKind !== "") {
         text += rolledJson.data.rolls[0].rollKind + ": ";
@@ -3191,3 +3274,89 @@ function detectOS() {
 function isTouchDevice() {
     return window.matchMedia("(pointer: coarse)").matches;
 }
+
+function addBeyond20EventListener(name, callback) {
+    const event = ["Beyond20_" + name, (evt) => {
+        const detail = evt.detail || [];
+        callback(...detail)
+    }, false];
+    document.addEventListener(...event);
+    return event;
+}
+function sendBeyond20Event(name, ...args) {
+    const rollDetail = args;
+    const event = new CustomEvent("Beyond20_" + name, { "detail": rollDetail });
+    document.dispatchEvent(event);
+}
+
+function sendRollToBeyond20(rolledJson) {
+    let roll = beyond20Roll;
+    let renderedRoll = beyond20RenderedRoll;
+
+    let operator = "+";
+    if (rolledJson.data.rolls[0].result.constant < 0) {
+        operator = "-";
+    }
+
+    let rollName = rolledJson.data.action;
+    if (rolledJson.data.action.length <= 3) {
+        rollName = abilityNameLookup[rolledJson.data.action.toLowerCase()];
+    }
+
+    roll.character.name = rolledJson.data.context.name;
+    roll.character.avatar = rolledJson.data.context.avatarUrl;
+    roll.character.id = rolledJson.entityId;
+    roll.character.url = "https://www.dndbeyond.com/characters/" + rolledJson.entityId;
+    roll.roll = rolledJson.data.rolls[0].diceNotationStr;
+    roll.ability = currentlyExpectedRoll.rollName.toUpperCase();
+    roll.modifier = operator + rolledJson.data.rolls[0].result.constant;
+    roll.name = rollName;
+
+    renderedRoll.attack_rolls[0].formula = roll.roll;
+    renderedRoll.attack_rolls[0].parts[0].total = rolledJson.data.rolls[0].result.values[0];
+    renderedRoll.attack_rolls[0].parts[0].formula = roll.roll.split(operator)[0];
+    renderedRoll.attack_rolls[0].parts[0].rolls = [];
+    for (let i = 0; i < rolledJson.data.rolls[0].result.values.length; i++) {
+        renderedRoll.attack_rolls[0].parts[0].rolls.push({
+            roll: rolledJson.data.rolls[0].result.values[i],
+        });
+    }
+    renderedRoll.attack_rolls[0].parts[0].amount = rolledJson.data.rolls[0].result.values.length;
+    renderedRoll.attack_rolls[0].parts[0].faces = parseInt(rolledJson.data.rolls[0].diceNotation.set[0].dieType.split("d")[1]);
+    renderedRoll.attack_rolls[0].parts[1] = operator;
+    renderedRoll.attack_rolls[0].parts[2] = rolledJson.data.rolls[0].result.constant;
+    renderedRoll.attack_rolls[0].total = rolledJson.data.rolls[0].result.total;
+    renderedRoll.character = roll.character.name;
+    renderedRoll.title = rollName + " (" + operator + rolledJson.data.rolls[0].result.constant + ")";
+    if (rolledJson.messageScope === "userId" && rolledJson.messageTarget !== getUserId()) {
+        renderedRoll.whisper = 1;
+        roll.whisper = 1;
+    }
+    if (rolledJson.data.rolls[0].rollKind === "advantage") {
+        roll.advantage = 3;
+    } else if (rolledJson.data.rolls[0].rollKind === "disadvantage") {
+        roll.advantage = 4;
+    }
+    if (rolledJson.data.action === "Initiative") {
+        roll.initiative = operator + rolledJson.data.rolls[0].result.constant;
+    }
+
+    if (rolledJson.data.rolls[0].rollType === "save") {
+        roll.type = "saving-throw";
+    } else if (rolledJson.data.rolls[0].rollType === "to hit") {
+        roll.type = "attack";
+        roll.rollAttack = true;
+    } else if (rolledJson.data.rolls[0].rollType === "damage") {
+        roll.type = "attack";
+        roll.rollDamage = true;
+    }
+
+    renderedRoll.request = roll;
+
+    sendBeyond20Event("SendMessage", renderedRoll);
+}
+
+addBeyond20EventListener("rendered-roll", (...args) => {
+    console.log("Rendered Roll");
+    console.log(args);
+});
