@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.4.2
+// @version      0.9.5
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -445,6 +445,7 @@ let currentURL = "";
 
 let requireTabOpen = false;
 let speakOnRoll = false;
+let beyond20OldMethod = false;
 
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
@@ -640,6 +641,11 @@ function loadLocalStorage() {
             document.getElementById("speakOnRoll").checked = speakOnRoll;
         }
 
+        if (localStorage.getItem("beyond20OldMethod") !== null) {
+            beyond20OldMethod = localStorage.getItem("beyond20OldMethod") === "true";
+            document.getElementById("beyond20OldMethod").checked = beyond20OldMethod;
+        }
+
         //localStorage.setItem("pixelModeOnlyExistingDice", virtualDice);
     }
 }
@@ -648,6 +654,11 @@ function checkIfBeyond20Installed() {
     let beyond20 = document.querySelector(".ct-beyond20-settings-button");
     if (beyond20 !== null) {
         beyond20Installed = true;
+    } else {
+        beyond20 = document.querySelector(".beyond20-quick-roll-tooltip");
+        if (beyond20 !== null) {
+            beyond20Installed = true;
+        }
     }
 
 }
@@ -782,6 +793,7 @@ function addRollWithPixelButton(contextMenu) {
             let amount = getAmountFromButton(lastRightClickedButton);
             let rollType = getRollTypeFromButton(lastRightClickedButton);
             let rollName = getRollNameFromButton(lastRightClickedButton);
+            let damageType = getDamageTypeFromButton(lastRightClickedButton);
 
             // Here we already know if we want to roll to our selve or not from the context menu
             // if (isEncounterBuilder) {
@@ -801,7 +813,8 @@ function addRollWithPixelButton(contextMenu) {
                 "rollType": rollType,
                 "rollName": rollName,
                 "target": target,
-                "scope": scope
+                "scope": scope,
+                "damageType": damageType
             };
 
             nextAdvantageRoll = false;
@@ -964,6 +977,7 @@ function handleMouseLeave(e) {
                     let amount = getAmountFromButton(elClone);
                     let rollType = getRollTypeFromButton(elClone);
                     let rollName = getRollNameFromButton(elClone);
+                    let damageType = getDamageTypeFromButton(elClone);
 
                     if (e.type === "contextmenu") {
                         elClone.parentNode.replaceChild(element, elClone);
@@ -1003,7 +1017,8 @@ function handleMouseLeave(e) {
                         "rollType": rollType,
                         "rollName": rollName,
                         "target": target,
-                        "scope": scope
+                        "scope": scope,
+                        "damageType": damageType
                     };
 
                     document.querySelector("#selfButton").style.backgroundColor = "darkgray";
@@ -1522,10 +1537,10 @@ function rollDice(dieType, value) {
 
             createToast(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], modifier, rolledJson.data.rolls[0].diceNotationStr);
 
-            //sendRollToBeyond20(rolledJson);
+            if (beyond20Installed && !beyond20OldMethod) {
+                sendRollToBeyond20(rolledJson);
+            }
 
-            // displayDieRoll(dieType, value, modifier);
-            // appendElementToGameLog(rolledJson);
             rolledJsonArray.push(rolledJson);
             currentlyExpectedRoll = {};
 
@@ -1792,188 +1807,180 @@ function addPixelModeButton() {
         e.preventDefault();
     }
 
-    beyond20Installed = false;
-    if (!beyond20Installed) {
+    let longPressStart = 0;
 
-        let longPressStart = 0;
+    div.addEventListener('touchstart', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (longPressStart === 0) {
+            longPressStart = Date.now();
 
-        div.addEventListener('touchstart', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            if (longPressStart === 0) {
-                longPressStart = Date.now();
+            if (!tootltipShown) {
 
-                if (!tootltipShown) {
+                let topleft = getPageTopLeft(div);
 
-                    let topleft = getPageTopLeft(div);
+                if (isMobileView) {
+                    displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left) - 50, parseInt(topleft.top) - 50);
+                } else if (isTabletView) {
+                    displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
+                } else {
+                    displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
+                }
 
-                    if (!beyond20Installed) {
-                        if (isMobileView) {
-                            displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left) - 50, parseInt(topleft.top) - 50);
-                        } else if (isTabletView) {
-                            displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
-                        } else {
-                            displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
-                        }
-                    } else {
-                        displayTooltip("Pixel Mode is not available when Beyond20 is installed<br>Use the right click menu instead or disable Beyond20", parseInt(topleft.left), parseInt(topleft.top) - 75);
+                tootltipShown = true;
+            }
+        }
+    });
+
+    function handleMouseUpTouchEnd(e) {
+        e.preventDefault();
+        console.log("Pixels button clicked");
+
+        //e.button describes the mouse button that was clicked
+        // 0 is left, 1 is middle, 2 is right
+        if (e.button == 0 && !e.ctrlKey) {
+            pixelModeOnlyOnce = true;
+            console.log("Pixels button clicked once");
+        }
+
+        if (longPressStart > 0 && Date.now() - longPressStart > 300) {
+            pixelModeOnlyOnce = false;
+            console.log("Pixels button long clicked");
+        } else if (longPressStart > 0) {
+            pixelModeOnlyOnce = true;
+        }
+        handleMainStuff();
+    }
+    function handleMainStuff() {
+        longPressStart = 0;
+
+        pixelMode = !pixelMode;
+        if (pixelMode) {
+            if (isEncounterBuilder) {
+                div.classList.add("ct-character-header-desktop__group--pixels-active");
+            }
+            div.firstChild.classList.add("ct-character-header-desktop__group--pixels-active");
+            document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
+                originalDiceClick.push(element);
+
+                let elClone = element.cloneNode(true);
+
+                element.parentNode.replaceChild(elClone, element);
+
+                function onClickHandler(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    console.log("Dice clicked");
+
+                    let modifier = getModifierFromButton(elClone);
+                    let dieType = getDieTypeFromButton(elClone);
+                    let amount = getAmountFromButton(elClone);
+                    let rollType = getRollTypeFromButton(elClone);
+                    let rollName = getRollNameFromButton(elClone);
+                    let damageType = getDamageTypeFromButton(elClone);
+
+                    if (e.type === "contextmenu") {
+                        elClone.parentNode.replaceChild(element, elClone);
+                        lastRightClickedButton = element;
+                        const event = new MouseEvent('contextmenu', {
+                            bubbles: true
+                        });
+                        element.dispatchEvent(event);
+                        swapButtonInterval = setInterval(() => {
+                            checkIfDiceButtonCanBeSwappedAgain(element, elClone);
+                        }, 50);
+                        return;
                     }
 
-                    tootltipShown = true;
-                }
-            }
-        });
+                    if ((!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") || (dieType === "d20" && isRollFlat(elClone))) {
+                        elClone.parentNode.replaceChild(element, elClone);
+                        element.click();
+                        element.parentNode.replaceChild(elClone, element);
+                        return;
+                    }
 
-        function handleMouseUpTouchEnd(e) {
-            e.preventDefault();
-            console.log("Pixels button clicked");
+                    let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
+                    if (isEncounterBuilder) {
+                        nextSelfRoll = true;
+                        target = getUserId();
+                        scope = "userId";
+                    }
 
-            //e.button describes the mouse button that was clicked
-            // 0 is left, 1 is middle, 2 is right
-            if (e.button == 0 && !e.ctrlKey) {
-                pixelModeOnlyOnce = true;
-                console.log("Pixels button clicked once");
-            }
+                    currentlyExpectedRoll = {
+                        "modifier": modifier,
+                        "dieType": dieType,
+                        "amount": amount,
+                        "origAmount": amount,
+                        "advantage": adv,
+                        "disadvantage": dis,
+                        "critical": crit,
+                        "rollType": rollType,
+                        "rollName": rollName,
+                        "target": target,
+                        "scope": scope,
+                        "damageType": damageType
+                    };
 
-            if (longPressStart > 0 && Date.now() - longPressStart > 300) {
-                pixelModeOnlyOnce = false;
-                console.log("Pixels button long clicked");
-            } else if (longPressStart > 0) {
-                pixelModeOnlyOnce = true;
-            }
-            handleMainStuff();
-        }
-        function handleMainStuff() {
-            longPressStart = 0;
+                    document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+                    document.querySelector("#everyoneButton").style.backgroundColor = "white";
+                    document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+                    document.querySelector("#advButton").style.backgroundColor = "darkgray";
+                    document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+                    document.querySelector("#critButton").style.backgroundColor = "darkgray";
 
-            pixelMode = !pixelMode;
-            if (pixelMode) {
-                if (isEncounterBuilder) {
-                    div.classList.add("ct-character-header-desktop__group--pixels-active");
-                }
-                div.firstChild.classList.add("ct-character-header-desktop__group--pixels-active");
-                document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
-                    originalDiceClick.push(element);
+                    if (nextAdvantageRoll && !dis && !crit) {
+                        currentlyExpectedRoll.advantage = true;
+                    }
+                    if (nextDisadvantageRoll && !adv && !crit) {
+                        currentlyExpectedRoll.disadvantage = true;
+                    }
+                    if (nextCriticalRoll && !adv && !dis) {
+                        currentlyExpectedRoll.critical = true;
+                    }
+                    if (nextEveryoneRoll) {
+                        setRollTarget("everyoneButton");
+                    }
+                    if (nextSelfRoll) {
+                        setRollTarget("selfButton");
+                    }
+                    if (nextDMRoll) {
+                        setRollTarget("dmButton");
+                    }
 
-                    let elClone = element.cloneNode(true);
-
-                    element.parentNode.replaceChild(elClone, element);
-
-                    function onClickHandler(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        e.stopImmediatePropagation();
-                        console.log("Dice clicked");
-
-                        let modifier = getModifierFromButton(elClone);
-                        let dieType = getDieTypeFromButton(elClone);
-                        let amount = getAmountFromButton(elClone);
-                        let rollType = getRollTypeFromButton(elClone);
-                        let rollName = getRollNameFromButton(elClone);
-
-                        if (e.type === "contextmenu") {
-                            elClone.parentNode.replaceChild(element, elClone);
-                            lastRightClickedButton = element;
-                            const event = new MouseEvent('contextmenu', {
-                                bubbles: true
-                            });
-                            element.dispatchEvent(event);
-                            swapButtonInterval = setInterval(() => {
-                                checkIfDiceButtonCanBeSwappedAgain(element, elClone);
-                            }, 50);
-                            return;
-                        }
-
-                        if ((!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") || (dieType === "d20" && isRollFlat(elClone))) {
-                            elClone.parentNode.replaceChild(element, elClone);
-                            element.click();
-                            element.parentNode.replaceChild(elClone, element);
-                            return;
-                        }
-
-                        let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
-                        if (isEncounterBuilder) {
-                            nextSelfRoll = true;
-                            target = getUserId();
-                            scope = "userId";
-                        }
-
-                        currentlyExpectedRoll = {
-                            "modifier": modifier,
-                            "dieType": dieType,
-                            "amount": amount,
-                            "origAmount": amount,
-                            "advantage": adv,
-                            "disadvantage": dis,
-                            "critical": crit,
-                            "rollType": rollType,
-                            "rollName": rollName,
-                            "target": target,
-                            "scope": scope
-                        };
-
-                        document.querySelector("#selfButton").style.backgroundColor = "darkgray";
-                        document.querySelector("#everyoneButton").style.backgroundColor = "white";
-                        document.querySelector("#dmButton").style.backgroundColor = "darkgray";
-                        document.querySelector("#advButton").style.backgroundColor = "darkgray";
-                        document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
-                        document.querySelector("#critButton").style.backgroundColor = "darkgray";
-
-                        if (nextAdvantageRoll && !dis && !crit) {
-                            currentlyExpectedRoll.advantage = true;
-                        }
-                        if (nextDisadvantageRoll && !adv && !crit) {
-                            currentlyExpectedRoll.disadvantage = true;
-                        }
-                        if (nextCriticalRoll && !adv && !dis) {
-                            currentlyExpectedRoll.critical = true;
-                        }
-                        if (nextEveryoneRoll) {
-                            setRollTarget("everyoneButton");
-                        }
-                        if (nextSelfRoll) {
-                            setRollTarget("selfButton");
-                        }
-                        if (nextDMRoll) {
-                            setRollTarget("dmButton");
-                        }
-
-                        if (window.pixels !== undefined && pixels.length > 0) {
-                            for (let i = 0; i < pixels.length; i++) {
-                                if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
-                                    lightUpPixel(pixels[i], "waitingForRoll");
-                                }
+                    if (window.pixels !== undefined && pixels.length > 0) {
+                        for (let i = 0; i < pixels.length; i++) {
+                            if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
+                                lightUpPixel(pixels[i], "waitingForRoll");
                             }
                         }
-                    };
-                    elClone.onclick = onClickHandler;
-                    elClone.addEventListener("contextmenu", onClickHandler);
-                });
-            } else {
-                div.firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
-                if (isEncounterBuilder) {
-                    div.classList.remove("ct-character-header-desktop__group--pixels-active");
-                }
-
-                document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
-                    element.parentNode.replaceChild(originalDiceClick[index], element);
-                });
-
-                originalDiceClick = [];
-                pixelModeOnlyOnce = false;
+                    }
+                };
+                elClone.onclick = onClickHandler;
+                elClone.addEventListener("contextmenu", onClickHandler);
+            });
+        } else {
+            div.firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
+            if (isEncounterBuilder) {
+                div.classList.remove("ct-character-header-desktop__group--pixels-active");
             }
 
-            if (tootltipShown) {
-                document.querySelector(".tippy-popper--pixel-mode").remove();
-                tootltipShown = false;
-            }
+            document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
+                element.parentNode.replaceChild(originalDiceClick[index], element);
+            });
+
+            originalDiceClick = [];
+            pixelModeOnlyOnce = false;
         }
 
-        div.addEventListener('touchend', handleMouseUpTouchEnd);
-        div.addEventListener('mouseup', handleMouseUpTouchEnd);
-    } else {
-        div.firstChild.classList.add("ct-character-header-desktop__group--pixels-not-available");
+        if (tootltipShown) {
+            document.querySelector(".tippy-popper--pixel-mode").remove();
+            tootltipShown = false;
+        }
     }
+
+    div.addEventListener('touchend', handleMouseUpTouchEnd);
+    div.addEventListener('mouseup', handleMouseUpTouchEnd);
 
     div.addEventListener('mouseover', function (e) {
         e.preventDefault();
@@ -1983,16 +1990,12 @@ function addPixelModeButton() {
 
             let topleft = getPageTopLeft(div);
 
-            if (!beyond20Installed) {
-                if (isMobileView) {
-                    displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left) - 50, parseInt(topleft.top) - 50);
-                } else if (isTabletView) {
-                    displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
-                } else {
-                    displayTooltip("Left click to enable pixel mode for 1 roll.<br>Right click to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
-                }
+            if (isMobileView) {
+                displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left) - 50, parseInt(topleft.top) - 50);
+            } else if (isTabletView) {
+                displayTooltip("Short tap to enable pixel mode for 1 roll.<br>Long tap to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
             } else {
-                displayTooltip("Pixel Mode is not available when Beyond20 is installed<br>Use the right click menu instead or disable Beyond20", parseInt(topleft.left), parseInt(topleft.top) - 75);
+                displayTooltip("Left click to enable pixel mode for 1 roll.<br>Right click to enable permantently", parseInt(topleft.left), parseInt(topleft.top) - 50);
             }
 
             tootltipShown = true;
@@ -2031,6 +2034,9 @@ function addPixelsInfoBox() {
         GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; min-width: 250px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
     } else {
         GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
+    }
+    if (isEncounterBuilder) {
+        GM_addStyle(`.pixels-info-box { line-height: 1; }`);
     }
     GM_addStyle(`.pixels-info-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
     GM_addStyle(`.pixels-info-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; cursor: move; }`);
@@ -2152,8 +2158,9 @@ function addDiceOverviewBox() {
     innerHTML += '<div class="dice-overview-box__content__settings__checkboxes">';
     innerHTML += '<input type="checkbox" id="diceOption" name="diceOption"><label for="diceOption"> Light up dice when other characters score a natural 1 or 20</label><br>';
     innerHTML += '<input type="checkbox" id="beyond20CustomRolls" name="beyond20CustomRolls"><label for="beyond20CustomRolls"> Do not send custom rolls to Roll20 (only relevant when Beyond20 is installed)</label><br>';
+    innerHTML += '<input type="checkbox" id="beyond20OldMethod" name="beyond20OldMethod"><label for="beyond20OldMethod"> Use deprecated way of handling Beyond20 (only relevant when Beyond20 is installed)</label><br>';
     innerHTML += '<input type="checkbox" id="pixelModeOnlyExistingDice" name="pixelModeOnlyExistingDice" checked><label for="pixelModeOnlyExistingDice"> When using pixel mode, use virtual dice when no Pixel die of a type is connected</label><br>';
-    innerHTML += '<input type="checkbox" id="useCustomDebouncer" name="useCustomDebouncer"><label for="useCustomDebouncer"> EXPERIMENTAL: Make false positives when rolling less likely</label><br>';
+    innerHTML += '<input type="checkbox" id="useCustomDebouncer" name="useCustomDebouncer"><label for="useCustomDebouncer"> Make false positives when rolling less likely</label><br>';
     innerHTML += '<input type="checkbox" id="ignoreRollsWhenTabInactive" name="ignoreRollsWhenTabInactive"><label for="ignoreRollsWhenTabInactive"> Ignore rolls when the tab is not open</label><br>';
     innerHTML += '<input type="checkbox" id="speakOnRoll" name="speakOnRoll"><label for="speakOnRoll"> Accessibility: Speak out results on roll with pixels dice</label><br>';
     innerHTML += '</div></div>';
@@ -2191,9 +2198,12 @@ function addDiceOverviewBox() {
     // add style to the info box (it should be in the middle of the page and be closed by default)
 
     if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
-        GM_addStyle(`.dice-overview-box { position: fixed; top: 50%; left: 50%; width: 95%; height: 95%; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
+        GM_addStyle(`.dice-overview-box { position: fixed; line-height: 1; top: 50%; left: 50%; width: 95%; height: 95%; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
     } else {
-        GM_addStyle(`.dice-overview-box { position: fixed; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
+        GM_addStyle(`.dice-overview-box { position: fixed; line-height: 1; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
+    }
+    if (isEncounterBuilder) {
+        GM_addStyle(`.dice-overview-box { line-height: 1; }`);
     }
     GM_addStyle(`.dice-overview-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
     GM_addStyle(`.dice-overview-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; }`);
@@ -2255,6 +2265,12 @@ function addDiceOverviewBox() {
     speakOnRollCheckbox.onclick = (e) => {
         speakOnRoll = speakOnRollCheckbox.checked;
         localStorage.setItem("speakOnRoll", speakOnRoll);
+    };
+
+    let beyond20OldMethodCheckbox = document.querySelector("#beyond20OldMethod");
+    beyond20OldMethodCheckbox.onclick = (e) => {
+        beyond20OldMethod = beyond20OldMethodCheckbox.checked;
+        localStorage.setItem("beyond20OldMethod", beyond20OldMethod);
     };
 
     // add style to the button (it should be in the top right corner of the box)
@@ -2611,6 +2627,17 @@ function getRollTypeFromButton(button) {
     return potentialRollType;
 }
 
+function getDamageTypeFromButton(button) {
+    let potentialDamageType = "";
+    if (button.querySelector(".ddbc-damage-type-icon") !== null) {
+        let splittedDamageType = button.querySelector(".ddbc-damage-type-icon").className.split("--")[1];
+        if (splittedDamageType !== undefined) {
+            potentialDamageType = splittedDamageType;
+        }
+    }
+    return potentialDamageType;
+}
+
 function checkForOpenGameLog() {
     const config = { attributes: false, childList: true, subtree: false };
     let gameLog = document.querySelector("[class*='GameLogEntries']");
@@ -2886,10 +2913,10 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
     innerDiv = innerDiv.replaceAll("DIETYPE", dieType);
     innerDiv = innerDiv.replaceAll("DICENOTATIONSTR", diceNotationStr);
 
-    if (beyond20CustomRollNoSend && Object.keys(currentlyExpectedRoll).length === 0) {
-        innerDiv = innerDiv.replaceAll("NOBA", "noty_bar_custom");
-    } else {
+    if (beyond20OldMethod && (Object.keys(currentlyExpectedRoll).length > 0 || (!beyond20CustomRollNoSend && Object.keys(currentlyExpectedRoll).length === 0))) {
         innerDiv = innerDiv.replaceAll("NOBA", "noty_bar");
+    } else {
+        innerDiv = innerDiv.replaceAll("NOBA", "noty_bar_custom");
     }
 
     let fullValue = "";
@@ -3296,6 +3323,10 @@ function isTouchDevice() {
     return window.matchMedia("(pointer: coarse)").matches;
 }
 
+function capitalizeFirstLetter(string) {
+    return string.charAt(0).toUpperCase() + string.slice(1);
+}
+
 function addBeyond20EventListener(name, callback) {
     const event = ["Beyond20_" + name, (evt) => {
         const detail = evt.detail || [];
@@ -3311,17 +3342,18 @@ function sendBeyond20Event(name, ...args) {
 }
 
 function sendRollToBeyond20(rolledJson) {
-    let roll = beyond20Roll;
-    let renderedRoll = beyond20RenderedRoll;
+    let roll = JSON.parse(JSON.stringify(beyond20Roll));
+    let renderedRoll = JSON.parse(JSON.stringify(beyond20RenderedRoll));
 
     let operator = "+";
     if (rolledJson.data.rolls[0].result.constant < 0) {
         operator = "-";
     }
+    let operatorForDisplay = operator === "+" ? "+" : "";
 
     let rollName = rolledJson.data.action;
     if (rolledJson.data.action.length <= 3) {
-        rollName = abilityNameLookup[rolledJson.data.action.toLowerCase()];
+        rollName = abilityNameLookup[rolledJson.data.action.toLowerCase()] || rollName;
     }
 
     roll.character.name = rolledJson.data.context.name;
@@ -3329,10 +3361,32 @@ function sendRollToBeyond20(rolledJson) {
     roll.character.id = rolledJson.entityId;
     roll.character.url = "https://www.dndbeyond.com/characters/" + rolledJson.entityId;
     roll.roll = rolledJson.data.rolls[0].diceNotationStr;
-    roll.ability = currentlyExpectedRoll.rollName.toUpperCase();
-    roll.modifier = operator + rolledJson.data.rolls[0].result.constant;
-    roll.name = rollName;
+    if (Object.keys(currentlyExpectedRoll).length > 0) {
+        roll.ability = currentlyExpectedRoll.rollName.toUpperCase();
+        roll.name = rollName;
 
+        renderedRoll.title = rollName + " (" + operatorForDisplay + rolledJson.data.rolls[0].result.constant + ")";
+
+        if (rolledJson.data.action === "Initiative") {
+            roll.initiative = operatorForDisplay + rolledJson.data.rolls[0].result.constant;
+            roll.type = "initiative";
+            renderedRoll.attack_rolls[0].type = "initiative";
+        }
+
+        if (rolledJson.data.rolls[0].rollType === "save") {
+            roll.type = "saving-throw";
+        } else if (rolledJson.data.rolls[0].rollType === "to hit") {
+            roll.type = "attack";
+            roll.rollAttack = true;
+        } else if (rolledJson.data.rolls[0].rollType === "damage") {
+            roll.type = "attack";
+            roll.rollDamage = true;
+        }
+    } else {
+        roll.name = "\n                            custom: roll\n                        ";
+        renderedRoll.title = "\n                            custom: roll\n                         (" + roll.roll.split(operator)[0] + ")";
+    }
+    roll.modifier = operatorForDisplay + rolledJson.data.rolls[0].result.constant;
     renderedRoll.attack_rolls[0].formula = roll.roll;
     renderedRoll.attack_rolls[0].parts[0].total = rolledJson.data.rolls[0].result.values[0];
     renderedRoll.attack_rolls[0].parts[0].formula = roll.roll.split(operator)[0];
@@ -3347,9 +3401,21 @@ function sendRollToBeyond20(rolledJson) {
     renderedRoll.attack_rolls[0].parts[1] = operator;
     renderedRoll.attack_rolls[0].parts[2] = rolledJson.data.rolls[0].result.constant;
     renderedRoll.attack_rolls[0].total = rolledJson.data.rolls[0].result.total;
+
+    if (Object.keys(currentlyExpectedRoll).length > 0 && currentlyExpectedRoll.damageType !== "") {
+        renderedRoll.damage_rolls[0] = [];
+        renderedRoll.damage_rolls[0][0] = capitalizeFirstLetter(currentlyExpectedRoll.damageType) + " Damage";
+        renderedRoll.damage_rolls[0][1] = renderedRoll.attack_rolls[0];
+        renderedRoll.damage_rolls[0][2] = roll.roll.split("d")[0];
+        renderedRoll.attack_rolls = [];
+        roll["damage-types"] = [capitalizeFirstLetter(currentlyExpectedRoll.damageType)];
+        roll["critical-damage-types"] = [capitalizeFirstLetter(currentlyExpectedRoll.damageType)];
+        delete roll.ability;
+        roll.type = "digital-dice";
+    }
+
     renderedRoll.character = roll.character.name;
-    renderedRoll.title = rollName + " (" + operator + rolledJson.data.rolls[0].result.constant + ")";
-    if (rolledJson.messageScope === "userId" && rolledJson.messageTarget !== getUserId()) {
+    if (isEncounterBuilder || (rolledJson.messageScope === "userId" && rolledJson.messageTarget !== getUserId())) {
         renderedRoll.whisper = 1;
         roll.whisper = 1;
     }
@@ -3358,22 +3424,31 @@ function sendRollToBeyond20(rolledJson) {
     } else if (rolledJson.data.rolls[0].rollKind === "disadvantage") {
         roll.advantage = 4;
     }
-    if (rolledJson.data.action === "Initiative") {
-        roll.initiative = operator + rolledJson.data.rolls[0].result.constant;
-    }
 
-    if (rolledJson.data.rolls[0].rollType === "save") {
-        roll.type = "saving-throw";
-    } else if (rolledJson.data.rolls[0].rollType === "to hit") {
-        roll.type = "attack";
-        roll.rollAttack = true;
-    } else if (rolledJson.data.rolls[0].rollType === "damage") {
-        roll.type = "attack";
-        roll.rollDamage = true;
+    if (rolledJson.data.rolls[0].rollKind === "advantage" || rolledJson.data.rolls[0].rollKind === "disadvantage") {
+        renderedRoll.damage_rolls = [];
+        for (let i = 0; i < rolledJson.data.rolls[0].result.values.length; i++) {
+            renderedRoll.attack_rolls[i] = JSON.parse(JSON.stringify(beyond20RenderedRoll.attack_rolls[0]));
+            renderedRoll.attack_rolls[i].formula = roll.roll;
+            renderedRoll.attack_rolls[i].total = rolledJson.data.rolls[0].result.values[i] + rolledJson.data.rolls[0].result.constant;
+            renderedRoll.attack_rolls[i].parts[0].total = rolledJson.data.rolls[0].result.values[i];
+            renderedRoll.attack_rolls[i].parts[0].formula = roll.roll.split(operator)[0];
+            renderedRoll.attack_rolls[i].parts[0].rolls = [];
+            renderedRoll.attack_rolls[i].parts[0].rolls.push({
+                roll: rolledJson.data.rolls[0].result.values[i],
+            });
+            renderedRoll.attack_rolls[i].parts[0].amount = rolledJson.data.rolls[0].result.values.length;
+            renderedRoll.attack_rolls[i].parts[0].faces = parseInt(rolledJson.data.rolls[0].diceNotation.set[0].dieType.split("d")[1]);
+            renderedRoll.attack_rolls[i].parts[1] = operator;
+            renderedRoll.attack_rolls[i].parts[2] = rolledJson.data.rolls[0].result.constant;
+        }
     }
 
     renderedRoll.request = roll;
 
+    if ((beyond20CustomRollNoSend && Object.keys(currentlyExpectedRoll).length === 0) || (rolledJson.messageScope === "userId" && rolledJson.messageTarget === getUserId())) {
+        return;
+    }
     sendBeyond20Event("SendMessage", renderedRoll);
 }
 
