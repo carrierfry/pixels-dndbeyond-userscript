@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.5
+// @version      0.9.5.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -3441,6 +3441,32 @@ function sendRollToBeyond20(rolledJson) {
             renderedRoll.attack_rolls[i].parts[0].faces = parseInt(rolledJson.data.rolls[0].diceNotation.set[0].dieType.split("d")[1]);
             renderedRoll.attack_rolls[i].parts[1] = operator;
             renderedRoll.attack_rolls[i].parts[2] = rolledJson.data.rolls[0].result.constant;
+        }
+
+        if (rolledJson.data.rolls[0].rollKind === "advantage") {
+            if (renderedRoll.attack_rolls[0].parts[0].rolls[0].roll === 20) {
+                renderedRoll.attack_rolls[0]["critical-success"] = true;
+            } else if (renderedRoll.attack_rolls[1].parts[0].rolls[0].roll === 20) {
+                renderedRoll.attack_rolls[1]["critical-success"] = true;
+            } else if (renderedRoll.attack_rolls[0].parts[0].rolls[0].roll === 1 && renderedRoll.attack_rolls[1].parts[0].rolls[0].roll === 1) {
+                renderedRoll.attack_rolls[0]["critical-failure"] = true;
+                renderedRoll.attack_rolls[1]["critical-failure"] = true;
+            }
+        } else if (rolledJson.data.rolls[0].rollKind === "disadvantage") {
+            if (renderedRoll.attack_rolls[0].parts[0].rolls[0].roll === 1) {
+                renderedRoll.attack_rolls[0]["critical-failure"] = true;
+            } else if (renderedRoll.attack_rolls[1].parts[0].rolls[0].roll === 1) {
+                renderedRoll.attack_rolls[1]["critical-failure"] = true;
+            } else if (renderedRoll.attack_rolls[0].parts[0].rolls[0].roll === 20 && renderedRoll.attack_rolls[1].parts[0].rolls[0].roll === 20) {
+                renderedRoll.attack_rolls[0]["critical-success"] = true;
+                renderedRoll.attack_rolls[1]["critical-success"] = true;
+            }
+        }
+    } else {
+        if (renderedRoll.attack_rolls.length > 0 && renderedRoll.attack_rolls[0].parts[0].rolls[0].roll === 20) {
+            renderedRoll.attack_rolls[0]["critical-success"] = true;
+        } else if (renderedRoll.attack_rolls.length > 0 && renderedRoll.attack_rolls[0].parts[0].rolls[0].roll === 1) {
+            renderedRoll.attack_rolls[0]["critical-failure"] = true;
         }
     }
 
