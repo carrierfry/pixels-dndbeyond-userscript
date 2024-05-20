@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.5.1
+// @version      0.9.5.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -885,8 +885,7 @@ function listenForMouseOverOfNavItems() {
         //     element.addEventListener('mouseleave', handleMouseLeave);
         // });
     } else {
-        // let navItems = document.querySelectorAll(".ddbc-tab-list__nav-item");
-        let navItems = document.querySelectorAll(".styles_tabButton__wvSLf"); // DnDBeyond: Let's rename this perfectly fine class from "ddbc-tab-list__nav-item" to something stupid like "styles_tabButton__wvSLf", why not?
+        let navItems = document.querySelectorAll("[class^='styles_tabButton']");
         navItems.forEach((element) => {
             element.removeEventListener('mouseenter', handleMouseEnter);
             element.removeEventListener('mouseleave', handleMouseLeave);
