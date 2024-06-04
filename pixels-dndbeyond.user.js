@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.5.2
+// @version      0.9.5.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -1322,7 +1322,7 @@ function getCharacterName() {
     if (isEncounterBuilder) {
         name = document.querySelector(".mon-stat-block__name");
     } else {
-        name = document.querySelector(".ddb-character-app-sn0l9p");
+        name = document.querySelector("[class*='ddb-character-app-']");
     }
     return name.innerText;
 }
@@ -3471,7 +3471,7 @@ function sendRollToBeyond20(rolledJson) {
 
     renderedRoll.request = roll;
 
-    if ((beyond20CustomRollNoSend && Object.keys(currentlyExpectedRoll).length === 0) || (rolledJson.messageScope === "userId" && rolledJson.messageTarget === getUserId())) {
+    if ((beyond20CustomRollNoSend && Object.keys(currentlyExpectedRoll).length === 0) || (rolledJson.messageScope === "userId" && rolledJson.messageTarget === getUserId() && !isEncounterBuilder)) {
         return;
     }
     sendBeyond20Event("SendMessage", renderedRoll);
@@ -3481,3 +3481,8 @@ addBeyond20EventListener("rendered-roll", (...args) => {
     console.log("Rendered Roll");
     console.log(args);
 });
+
+// addBeyond20EventListener("Beyond20_Loaded", settings => {
+//     console.log("Beyond20_Loaded");
+//     console.log(settings);
+// });
