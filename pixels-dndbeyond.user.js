@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.6.1
+// @version      0.9.6.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -550,7 +550,7 @@ function main() {
                 if (isTabletView) {
                     color = window.getComputedStyle(document.querySelector(".ct-character-header-tablet__button")).getPropertyValue("border-color");
                 } else if (isMobileView) {
-                    color = window.getComputedStyle(document.querySelector(".ct-status-summary-mobile__button")).getPropertyValue("border-color");
+                    color = window.getComputedStyle(document.querySelector(".ct-combat-mobile__cta-button")).getPropertyValue("border-color");
                 } else {
                     color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
                 }
