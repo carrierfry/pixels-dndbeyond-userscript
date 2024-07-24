@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "Pixels DnDBeyond Integration",
     "description": "Allows you to use pixel dice in DnDBeyond",
-    "version": "0.9.5.3",
+    "version": "0.9.6.2",
     "content_scripts": [
         {
             "matches": [

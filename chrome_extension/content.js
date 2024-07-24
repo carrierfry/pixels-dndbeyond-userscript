@@ -425,6 +425,7 @@ let currentURL = "";
 let requireTabOpen = false;
 let speakOnRoll = false;
 let beyond20OldMethod = false;
+let beyond20Settings = {};
 
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
@@ -528,7 +529,7 @@ function main() {
                 if (isTabletView) {
                     color = window.getComputedStyle(document.querySelector(".ct-character-header-tablet__button")).getPropertyValue("border-color");
                 } else if (isMobileView) {
-                    color = window.getComputedStyle(document.querySelector(".ct-status-summary-mobile__button")).getPropertyValue("border-color");
+                    color = window.getComputedStyle(document.querySelector(".ct-combat-mobile__cta-button")).getPropertyValue("border-color");
                 } else {
                     color = window.getComputedStyle(document.querySelector(".ct-character-header-desktop__button")).getPropertyValue("border-color");
                 }
@@ -2009,9 +2010,9 @@ function addPixelsInfoBox() {
     // it should expand to the right when opened and be roughly 300px wide
 
     if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
-        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; min-width: 250px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
+        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; min-width: 250px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 9999`);
     } else {
-        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 999`);
+        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 9999`);
     }
     if (isEncounterBuilder) {
         GM_addStyle(`.pixels-info-box { line-height: 1; }`);
@@ -2077,9 +2078,9 @@ function addPixelsInfoBox() {
     // add style to the button
     if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
         // make button in top middle
-        GM_addStyle(`.pixels-info-box__button { position: fixed; top: 6px; left: calc(50% - 16px); width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
+        GM_addStyle(`.pixels-info-box__button { position: fixed; top: 6px; left: calc(50% - 16px); width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 9999`);
     } else {
-        GM_addStyle(`.pixels-info-box__button { position: fixed; top: 18px; left: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 999`);
+        GM_addStyle(`.pixels-info-box__button { position: fixed; top: 18px; left: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 9999`);
     }
 
     // Initialize variables for tracking dragging state and position
@@ -2176,9 +2177,9 @@ function addDiceOverviewBox() {
     // add style to the info box (it should be in the middle of the page and be closed by default)
 
     if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
-        GM_addStyle(`.dice-overview-box { position: fixed; line-height: 1; top: 50%; left: 50%; width: 95%; height: 95%; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
+        GM_addStyle(`.dice-overview-box { position: fixed; line-height: 1; top: 50%; left: 50%; width: 95%; height: 95%; background-color: rgba(0,0,0,0.95); z-index: 9999; transform: translate(-50%, -50%); }`);
     } else {
-        GM_addStyle(`.dice-overview-box { position: fixed; line-height: 1; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 999; transform: translate(-50%, -50%); }`);
+        GM_addStyle(`.dice-overview-box { position: fixed; line-height: 1; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 9999; transform: translate(-50%, -50%); }`);
     }
     if (isEncounterBuilder) {
         GM_addStyle(`.dice-overview-box { line-height: 1; }`);
@@ -2252,7 +2253,7 @@ function addDiceOverviewBox() {
     };
 
     // add style to the button (it should be in the top right corner of the box)
-    GM_addStyle(`.dice-overview-box__button { position: absolute; top: 0%; right: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; color: white; z-index: 999`);
+    GM_addStyle(`.dice-overview-box__button { position: absolute; top: 0%; right: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; color: white; z-index: 9999`);
 }
 
 function addDieToTable(pixel) {
@@ -2520,7 +2521,7 @@ function getRollNameFromButton(button) {
         potentialName = button.closest(".ct-main-tablet__ability").querySelector(".ddbc-ability-summary__abbr").innerText;
     } else if (button.closest(".ddbc-saving-throws-summary__ability-modifier") !== null) {
         potentialName = button.closest(".ddbc-saving-throws-summary__ability-modifier").parentElement.children[3].firstChild.innerText;
-    } else if (button.closest(".ct-initiative-box") !== null || button.closest(".ct-combat-mobile__extra--initiative") !== null) {
+    } else if (button.closest(".ct-combat__summary-group--initiative") !== null || button.closest(".styles_valueMobile__XCC2z") !== null) {
         potentialName = "Initiative";
     } else if (button.closest(".ddbc-combat-attack__action") !== null) {
         potentialName = button.closest(".ddbc-combat-attack__action").parentElement.children[1].firstChild.firstChild.innerText;
@@ -3393,10 +3394,19 @@ function sendRollToBeyond20(rolledJson) {
     }
 
     renderedRoll.character = roll.character.name;
-    if (isEncounterBuilder || (rolledJson.messageScope === "userId" && rolledJson.messageTarget !== getUserId())) {
-        renderedRoll.whisper = 1;
-        roll.whisper = 1;
+    // if (isEncounterBuilder || (rolledJson.messageScope === "userId" && rolledJson.messageTarget !== getUserId())) {
+    //     renderedRoll.whisper = 1;
+    //     roll.whisper = 1;
+    // }
+
+    if (isEncounterBuilder) {
+        renderedRoll.whisper = beyond20Settings["whisper-type-monsters"];
+        roll.whisper = beyond20Settings["whisper-type-monsters"];
+    } else {
+        renderedRoll.whisper = beyond20Settings["whisper-type"];
+        roll.whisper = beyond20Settings["whisper-type"];
     }
+
     if (rolledJson.data.rolls[0].rollKind === "advantage") {
         roll.advantage = 3;
     } else if (rolledJson.data.rolls[0].rollKind === "disadvantage") {
@@ -3461,7 +3471,6 @@ addBeyond20EventListener("rendered-roll", (...args) => {
     console.log(args);
 });
 
-// addBeyond20EventListener("Beyond20_Loaded", settings => {
-//     console.log("Beyond20_Loaded");
-//     console.log(settings);
-// });
+addBeyond20EventListener("NewSettings", settings => {
+    beyond20Settings = settings;
+});
