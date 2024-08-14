@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.6.3
+// @version      0.9.6.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -448,6 +448,8 @@ let speakOnRoll = false;
 let beyond20OldMethod = false;
 let beyond20Settings = {};
 
+let currentPixelRatio = ((window.outerWidth - 10) / window.innerWidth) * 100;
+
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
         for (const addedNode of mutation.addedNodes) {
@@ -591,6 +593,32 @@ function main() {
                 GM_addStyle(`.tippy-popper[x-placement^=top] .tippy-arrow { border-top: 7px solid #333; border-right: 7px solid transparent; border-left: 7px solid transparent; bottom: -7px; margin: 0 7px; -webkit-transform-origin: 50% 0; transform-origin: 50% 0; }`);
                 GM_addStyle(`.tippy-arrow, .tippy-roundarrow { position: absolute; width: 0; height: 0; }`);
                 GM_addStyle(`.tippy-tooltip.custom-dark-theme { background-color: #b0b7bd; color: #000 }`);
+            }
+
+            window.addEventListener("resize", getSizes, false);
+
+            function getSizes() {
+                let zoom = ((window.outerWidth - 10)
+                    / window.innerWidth) * 100;
+
+                if (zoom !== currentPixelRatio) {
+                    let div = document.querySelector(".pixels-info-box");
+
+                    let newX = div.offsetLeft;
+                    let newY = div.offsetTop;
+
+                    // Get the boundaries of the screen
+                    const maxX = window.innerWidth - div.offsetWidth;
+                    const maxY = window.innerHeight - div.offsetHeight;
+
+                    // Ensure the box stays within the screen boundaries
+                    newX = Math.max(0, Math.min(newX, maxX));
+                    newY = Math.max(0, Math.min(newY, maxY));
+
+                    div.style.left = `${newX}px`;
+                    div.style.top = `${newY}px`;
+                }
+                currentPixelRatio = zoom;
             }
 
             doneOnlyOnceStuff = true;
@@ -2995,7 +3023,7 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
     document.querySelector("body").appendChild(div);
 
     setTimeout(() => {
-        //div.remove();
+        div.remove();
     }, 8000);
 }
 
