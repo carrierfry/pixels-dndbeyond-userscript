@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.6.4
+// @version      0.9.7.0
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -450,6 +450,8 @@ let beyond20Settings = {};
 
 let currentPixelRatio = ((window.outerWidth - 10) / window.innerWidth) * 100;
 
+let enableCustomModifiers = false;
+
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
         for (const addedNode of mutation.addedNodes) {
@@ -673,6 +675,11 @@ function loadLocalStorage() {
         if (localStorage.getItem("beyond20OldMethod") !== null) {
             beyond20OldMethod = localStorage.getItem("beyond20OldMethod") === "true";
             document.getElementById("beyond20OldMethod").checked = beyond20OldMethod;
+        }
+
+        if (localStorage.getItem("enableCustomModifiers") !== null) {
+            enableCustomModifiers = localStorage.getItem("enableCustomModifiers") === "true";
+            document.getElementById("enableCustomModifiers").checked = enableCustomModifiers;
         }
 
         //localStorage.setItem("pixelModeOnlyExistingDice", virtualDice);
@@ -1511,6 +1518,11 @@ function rollDice(dieType, value) {
         modifier = parseInt(currentlyExpectedRoll.modifier);
     }
 
+    if (enableCustomModifiers) {
+        modifier += parseInt(document.getElementById("customModifierSelect").value);
+        document.getElementById("customModifierSelect").selectedIndex = 5;
+    }
+
     if (multiRollComplete || Object.keys(currentlyExpectedRoll).length === 0 || currentlyExpectedRoll.amount === 1) {
         let initJson;
         if (d100RollHappening && d100RollParts.length === 0) {
@@ -2060,7 +2072,7 @@ function addPixelsInfoBox() {
     // it should expand to the right when opened and be roughly 300px wide
 
     if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
-        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; min-width: 250px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 9999`);
+        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; min-width: 250px; height: 300px; background-color: rgba(0,0,0,0.90); z-index: 9999`);
     } else {
         GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 9999`);
     }
@@ -2070,6 +2082,9 @@ function addPixelsInfoBox() {
     GM_addStyle(`.pixels-info-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
     GM_addStyle(`.pixels-info-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; cursor: move; }`);
     GM_addStyle(`.pixels-info-box__content__text { position: absolute; top: 10%; left: 0%; width: 100%; height: 80%; font-size: 1em; text-align: center; color: white; overflow-y:auto; }`);
+    GM_addStyle(`.pixels-info-box__content__custom_modifier { position: absolute; top: 40%; left: 0%; font-size: 1em; text-align: center; color: white; }`);
+    GM_addStyle(`.pixels-info-box__content__custom_modifier_text { position: absolute; top: 40%; height: 20%; font-size: 1em; text-align: center; color: white; }`);
+    GM_addStyle(`.pixels-info-box__content__custom_modifier_select { position: absolute; left: 80px; font-size: 1em; text-align: center; }`);
     GM_addStyle(`.pixels-info-box__content__buttons { position: absolute; top: 90%; left: 0%; width: 100%; height: 10%; }`);
     GM_addStyle(`.pixels-info-box__content__buttons_target { position: absolute; top: 75%; left: 0%; width: 100%; height: 10%; }`);
     GM_addStyle(`.pixels-info-box__content__buttons_overview { position: absolute; top: 60%; left: 0%; width: 100%; height: 10%; }`);
@@ -2172,6 +2187,24 @@ function addPixelsInfoBox() {
     document.addEventListener('mouseup', () => {
         isDragging = false;
     });
+
+    setTimeout(() => {
+        addOrRemoveCustomModifiersDOM();
+    }, 50);
+}
+
+function addOrRemoveCustomModifiersDOM() {
+    if (enableCustomModifiers) {
+        let buttonsDiv = document.querySelector(".pixels-info-box__content__buttons_overview");
+
+        let customModifierDiv = document.createElement("div");
+        customModifierDiv.innerHTML = "<p id='customModifierText' class='pixels-info-box__content__custom_modifier_text'>Custom Modifier:</p> <select id='customModifierSelect' class='pixels-info-box__content__custom_modifier_select'><option value='-5'>-5</option><option value='-4'>-4</option><option value='-3'>-3</option><option value='-2'>-2</option><option value='-1'>-1</option><option value='0' selected>0</option><option value='1'>+1</option><option value='2'>+2</option><option value='3'>+3</option><option value='4'>+4</option><option value='5'>+5</option></select>";
+        customModifierDiv.classList.add("pixels-info-box__content__custom_modifier");
+
+        buttonsDiv.insertAdjacentElement("beforebegin", customModifierDiv);
+    } else {
+        document.querySelector(".pixels-info-box__content__custom_modifier").remove();
+    }
 }
 
 function addDiceOverviewBox() {
@@ -2192,6 +2225,7 @@ function addDiceOverviewBox() {
     innerHTML += '<input type="checkbox" id="useCustomDebouncer" name="useCustomDebouncer"><label for="useCustomDebouncer"> Make false positives when rolling less likely</label><br>';
     innerHTML += '<input type="checkbox" id="ignoreRollsWhenTabInactive" name="ignoreRollsWhenTabInactive"><label for="ignoreRollsWhenTabInactive"> Ignore rolls when the tab is not open</label><br>';
     innerHTML += '<input type="checkbox" id="speakOnRoll" name="speakOnRoll"><label for="speakOnRoll"> Accessibility: Speak out results on roll with pixels dice</label><br>';
+    innerHTML += '<input type="checkbox" id="enableCustomModifiers" name="enableCustomModifiers"><label for="enableCustomModifiers"> Enable custom modifiers in pixel info box</label><br>';
     innerHTML += '</div></div>';
     innerHTML += '<div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
 
@@ -2300,6 +2334,14 @@ function addDiceOverviewBox() {
     beyond20OldMethodCheckbox.onclick = (e) => {
         beyond20OldMethod = beyond20OldMethodCheckbox.checked;
         localStorage.setItem("beyond20OldMethod", beyond20OldMethod);
+    };
+
+    let enableCustomModifiersCheckbox = document.querySelector("#enableCustomModifiers");
+    enableCustomModifiersCheckbox.onclick = (e) => {
+        enableCustomModifiers = enableCustomModifiersCheckbox.checked;
+        localStorage.setItem("enableCustomModifiers", enableCustomModifiers);
+
+        addOrRemoveCustomModifiersDOM();
     };
 
     // add style to the button (it should be in the top right corner of the box)
