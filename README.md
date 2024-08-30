@@ -1,4 +1,5 @@
 # Pixels DnD Beyond integration
+[![Chrome Web Store](https://storage.googleapis.com/web-dev-uploads/image/WlD8wC6g8khYWPJUsQceQkhXSlv1/UV4C4ybeBTsZt43U4xis.png)](https://chromewebstore.google.com/detail/pixels-dndbeyond-integrat/dldknofeibljjommedjjegffjlemgack)
 
 This is a userscript that integrates [Pixels](https://gamewithpixels.com/) into [DnD Beyond](https://www.dndbeyond.com/) by making it possible to throw pixel dice and submit the result to DnD Beyond.
 
@@ -35,34 +36,34 @@ Alternatively, you can install the userscript by following the instructions belo
 
 ## How to use
 
-1. Open a character sheet in DnD Beyond (make sure to reload the page once it's open if you opened it by clicking on `view` in your campaign or character overview)
-2. Click on the `Connect to Pixels` text at the top right (to the right of the `Subscribe` text) and connect to your Pixel dice
+1. Optional step: Change the flag `chrome://flags/#enable-web-bluetooth-new-permissions-backend` to enabled. That way you don't have to manually connect your dice every time you open the character sheet
+2. Open a character sheet in DnD Beyond (make sure to reload the page once it's open if you opened it by clicking on `view` in your campaign or character overview)
+3. Click on the `Connect to Pixels` text at the top right (to the right of the `Subscribe` text) and connect to your Pixel dice
 ![connect to pixels image](documentation/img/connect_to_pixels.png)
-3. Repeat step 2 for every pixel die you want to connect
+4. Repeat step 2 for every pixel die you want to connect
 
 Once you are connected to your Pixel dice, there are 2 ways to roll with them:
-1. Click on `Pixel Mode`. Now every time you click on a check/save/damage button, it will wait for you to roll your Pixel die and then automatically submit the roll to DnD Beyond.
+1. `Pixel Mode` is enabled by default. Every time you click on a check/save/damage button, it will check if you have a pixel die connected that matches the roll you clicked on and then wait for you to roll your Pixel die (if you don't, it will roll a virtual die instead). Afterwards it automatically submits the roll to DnD Beyond. You can disable `Pixel Mode` by clicking on the `Pixel Mode` button at the top beside the `Short Rest` button.
 ![pixel mode button](documentation/img/pixel_mode_button.png)
 2. Right click on a check/save/damage button and click on `Roll with Pixels`. Again the site will wait for you to roll your Pixel die and then automatically submit the roll to DnD Beyond.
 ![roll with pixels button](documentation/img/roll_with_pixels_button.png)
 
-## What is "Pixel Mode"?
-Pixel Mode allows you to choose a check/save/damage and then roll your Pixel die. Instead of rolling a virtual die, the site waits for you to roll your Pixel die and then automatically submits the roll to DnD Beyond.
-You can enable it by clicking on the `Pixel Mode` button at the top beside the `Short Rest` button.
+## Support for mobile
+It is possible to use the integration with the mobile view of DnD Beyond. This requires the use of a browser that supports chrome extensions though:
 
-If you left click on the `Pixel Mode` button, it will enable Pixel Mode for the next roll.<br>
-If you right click on the `Pixel Mode` button, it will enable Pixel Mode until you disable it again.
+### Install the extension from the chrome web store
 
-Pixel Mode is not available when using [Beyond20](https://beyond20.here-for-more.info/) as there are bugs with it.
+Follow the instructions in the [mobile guide](guides\mobile.md)!
+### Install the extension via Tampermonkey (***only for advanced users***)
 
-## Experimental support for mobile
-With the latest version it is possible to use the Tampermonkey script on the mobile view of DnD Beyond. This requires the use of a browser that supports chrome extensions though:
 1. Install the [Kiwi Browser](https://play.google.com/store/apps/details?id=com.kiwibrowser.browser) from the Play Store and open it
 2. Tap on the 3 dots and select `Extensions`. There, tap on `+ (from store)`
 3. A window of the chrome web store opens. Search for `Tampermonkey` and install it
 4. Once installed, click on [this link](https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js) **in the Kiwi browser**! A window of Tampermonkey should pop up, asking you, if you want to install the script. Accept that
 5. Go to DnD Beyond and open a character sheet. Make sure to reload it once.
 6. Click on the hamburger menu on the top right and select `Connect to Pixels`. From here on everything should work like it does on PC
+
+The Kiwi Browser is not the only browser that supports the extension. There is also the [Lemur Browser](https://play.google.com/store/apps/details?id=com.lemurbrowser.exts). This one can even enable the flag for automatically reconnecting to your Pixel dice.
 
 ## Todos / Things that need to be implemented
 - [x] ~~Support other dice than D20s~~
