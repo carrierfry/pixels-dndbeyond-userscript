@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.9.0
+// @version      0.9.9.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -608,6 +608,7 @@ function main() {
                 setInterval(listenForMouseOverOfNavItems, 300);
                 setInterval(listenForQuickNavMenu, 20);
                 setInterval(checkForHealthChange, 300);
+                setInterval(refreshRSSI, 30000);
             }
 
             if (isEncounterBuilder) {
@@ -825,6 +826,14 @@ function checkForHealthChange() {
         lightUpAllPixels("damage");
 
         lastHealth = 0;
+    }
+}
+
+function refreshRSSI() {
+    for (let i = 0; i < window.pixels.length; i++) {
+        if (window.pixels[i].status === "ready") {
+            window.pixels[i].queryRssi();
+        }
     }
 }
 
@@ -2274,7 +2283,7 @@ function addDiceOverviewBox() {
     innerHTML += '<input type="checkbox" id="speakOnRoll" name="speakOnRoll"><label for="speakOnRoll"> Accessibility: Speak out results on roll with pixels dice</label><br>';
     innerHTML += '<input type="checkbox" id="enableCustomModifiers" name="enableCustomModifiers"><label for="enableCustomModifiers"> Enable custom modifiers in pixel info box</label><br>';
     innerHTML += '</div></div>';
-    innerHTML += '<div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
+    innerHTML += '<div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>RSSI</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
 
     if (!!navigator?.bluetooth?.getDevices) {
         innerHTML = innerHTML.replaceAll('AUTO_STATUS', '<span class="pixelsAutoReconnectStatus" style="color: lime">enabled</span>');
@@ -2328,6 +2337,14 @@ function addDiceOverviewBox() {
     GM_addStyle(`.dice-overview-box__content__table table td a:hover { cursor: pointer; color: yellow; }`);
     //make the box movable
     GM_addStyle(`.dice-overview-box { -webkit-app-region: drag; }`);
+
+    // add styles for RSSI
+    GM_addStyle(`.signal-container { display: flex; align-items: flex-end; justify-content: space-between; margin: 6px; }`);
+    GM_addStyle(`.bar { width: 8px; height: 8px; border: 1px solid white; background-color: transparent; }`);
+    GM_addStyle(`.filled { background-color: white; }`);
+    GM_addStyle(`.bar:nth-child(2) { height: 12px; }`);
+    GM_addStyle(`.bar:nth-child(3) { height: 16px; }`);
+    GM_addStyle(`.bar:nth-child(4) { height: 20px; }`);
 
 
     // the box should be closed by default
@@ -2406,6 +2423,7 @@ function addDieToTable(pixel) {
     let connectionStatusCell = undefined;
     let rollStatusCell = undefined;
     let batteryCell = undefined;
+    let rssiCell = undefined;
     let faceCell = undefined;
     let actionCell = undefined;
 
@@ -2419,8 +2437,9 @@ function addDieToTable(pixel) {
         connectionStatusCell = newRow.insertCell(2);
         rollStatusCell = newRow.insertCell(3);
         batteryCell = newRow.insertCell(4);
-        faceCell = newRow.insertCell(5);
-        actionCell = newRow.insertCell(6);
+        rssiCell = newRow.insertCell(5);
+        faceCell = newRow.insertCell(6);
+        actionCell = newRow.insertCell(7);
     } else {
         newRow = document.getElementById("pixel" + pixel.pixelId);
         onlyUpdate = true;
@@ -2430,8 +2449,9 @@ function addDieToTable(pixel) {
         connectionStatusCell = newRow.children[2];
         rollStatusCell = newRow.children[3];
         batteryCell = newRow.children[4];
-        faceCell = newRow.children[5];
-        actionCell = newRow.children[6];
+        rssiCell = newRow.children[5];
+        faceCell = newRow.children[6];
+        actionCell = newRow.children[7];
     }
 
     if (!onlyUpdate) {
@@ -2466,7 +2486,10 @@ function addDieToTable(pixel) {
     connectionStatusCell.innerHTML = pixel.status;
     rollStatusCell.innerHTML = pixel.rollState;
     batteryCell.innerHTML = pixel.batteryLevel + "%";
+    rssiCell.innerHTML = '<div class="signal-container"> <div class="bar" id="bar1"></div> <div class="bar" id="bar2"></div> <div class="bar" id="bar3"></div> <div class="bar" id="bar4"></div></div>';
     faceCell.innerHTML = pixel.currentFace;
+
+    updateSignalStrength(rssiValueToLevel(pixel.rssi), newRow);
 
     if (!pixel.manualDisconnect) {
         setTimeout(() => {
@@ -2474,6 +2497,35 @@ function addDieToTable(pixel) {
         }, 300);
     } else {
         newRow.remove();
+    }
+}
+
+function rssiValueToLevel(rssiValue) {
+    if (rssiValue < -90) {
+        return 0;
+    } else if (rssiValue < -80) {
+        return 1;
+    } else if (rssiValue < -70) {
+        return 2;
+    } else if (rssiValue < -67) {
+        return 3;
+    } else {
+        return 4;
+    }
+}
+
+function updateSignalStrength(rssiLevel, tableRow) {
+    // Ensure that rssiLevel is between 0 and 4
+    rssiLevel = Math.max(0, Math.min(4, rssiLevel));
+
+    // Loop through each bar and fill them based on the rssiLevel
+    for (let i = 1; i <= 4; i++) {
+        let bar = tableRow.querySelector(`#bar${i}`);
+        if (i <= rssiLevel) {
+            bar.classList.add('filled');
+        } else {
+            bar.classList.remove('filled');
+        }
     }
 }
 
