@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      0.9.9.1
+// @version      1.0.0.0
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -3699,3 +3699,6 @@ addBeyond20EventListener("rendered-roll", (...args) => {
 addBeyond20EventListener("NewSettings", settings => {
     beyond20Settings = settings;
 });
+
+// A huge thanks goes to all the people that have tested this integration on the Pixel's Discord server.
+// Without them, this integration would not be so refined as it is now.
