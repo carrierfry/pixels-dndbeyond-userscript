@@ -72,6 +72,29 @@ const diceTypes = {
             "text": "8"
         }
     },
+    "d00": {
+        "diceNotation": {
+            "set": [{
+                "count": 1,
+                "dieType": "d00",
+                "dice": [{
+                    "dieType": "d00",
+                    "dieValue": 0
+                }],
+                "operation": 0
+            }],
+            "constant": 0
+        },
+        "diceNotationStr": "1d00",
+        "rollType": "roll",
+        "rollKind": "",
+        "result": {
+            "constant": 0,
+            "values": [10],
+            "total": 0,
+            "text": "0"
+        }
+    },
     "d10": {
         "diceNotation": {
             "set": [{
@@ -429,6 +452,8 @@ let beyond20Settings = {};
 
 let currentPixelRatio = ((window.outerWidth - 10) / window.innerWidth) * 100;
 
+let enableCustomModifiers = false;
+
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
         for (const addedNode of mutation.addedNodes) {
@@ -440,6 +465,8 @@ const callback = (mutationList, observer) => {
                         addedNode.classList.add("reordered-entry");
                         gameLog.prepend(addedNode);
                         console.log("Reordered entry");
+
+                        scrollGameLogToBottom();
                     }, 100);
                 }
             }
@@ -560,6 +587,7 @@ function main() {
                 setInterval(listenForMouseOverOfNavItems, 300);
                 setInterval(listenForQuickNavMenu, 20);
                 setInterval(checkForHealthChange, 300);
+                setInterval(refreshRSSI, 30000);
             }
 
             if (isEncounterBuilder) {
@@ -652,6 +680,11 @@ function loadLocalStorage() {
         if (localStorage.getItem("beyond20OldMethod") !== null) {
             beyond20OldMethod = localStorage.getItem("beyond20OldMethod") === "true";
             document.getElementById("beyond20OldMethod").checked = beyond20OldMethod;
+        }
+
+        if (localStorage.getItem("enableCustomModifiers") !== null) {
+            enableCustomModifiers = localStorage.getItem("enableCustomModifiers") === "true";
+            document.getElementById("enableCustomModifiers").checked = enableCustomModifiers;
         }
 
         //localStorage.setItem("pixelModeOnlyExistingDice", virtualDice);
@@ -772,6 +805,14 @@ function checkForHealthChange() {
         lightUpAllPixels("damage");
 
         lastHealth = 0;
+    }
+}
+
+function refreshRSSI() {
+    for (let i = 0; i < window.pixels.length; i++) {
+        if (window.pixels[i].status === "ready") {
+            window.pixels[i].queryRssi();
+        }
     }
 }
 
@@ -1437,11 +1478,12 @@ function getCompleteCharacterData() {
 }
 
 // "Rolls" a die. You can specify the dice type and value and it will send the appropriate messages to the server.
-function rollDice(dieType, value) {
+function rollDice(realDieType, value) {
     let modifier = 0;
     let multiRollComplete = false;
     let amount = 1;
     let forcedMultiRoll = false;
+    let dieType = realDieType;
 
     if (requireTabOpen && document.hidden) {
         return;
@@ -1495,14 +1537,26 @@ function rollDice(dieType, value) {
         if (d100RollHappening && d100RollParts.length === 0) {
             d100RollParts.push(value);
             console.log("waiting for second d100 roll part");
-        } else if (d100RollHappening && d100RollParts.length === 1) {
-            d100RollParts.push(value);
-            let d100Value = d100RollParts[0] + d100RollParts[1];
-            if (d100Value === 0) {
-                d100Value = 100;
-            }
-            initJson = buildInitialJson("d100", modifier, d100Value);
         } else {
+            let dieValue = 0;
+            if (d100RollHappening && d100RollParts.length === 1) {
+                d100RollParts.push(value);
+                let d100Value = d100RollParts[0] + d100RollParts[1];
+                if (d100Value === 0) {
+                    d100Value = 100;
+                }
+
+                dieType = "d100";
+                amount = 1;
+                dieValue = d100Value;
+
+                // initJson = buildInitialJson("d100", modifier, d100Value);
+                console.log("d100 roll complete");
+            }
+            if (enableCustomModifiers) {
+                modifier += parseInt(document.getElementById("customModifierSelect").value);
+                document.getElementById("customModifierSelect").selectedIndex = 5;
+            }
             if (Object.keys(currentlyExpectedRoll).length > 0) {
                 initJson = buildInitialJson(dieType, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName, currentlyExpectedRoll.target, currentlyExpectedRoll.scope);
             } else {
@@ -1513,7 +1567,13 @@ function rollDice(dieType, value) {
                 socket.send(JSON.stringify(initJson));
             }
 
-            let dieValue = value || Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
+            if (value === undefined) {
+                Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
+            } else {
+                if (dieType !== "d100") {
+                    dieValue = value;
+                }
+            }
 
             let rolledJson;
             if (Object.keys(currentlyExpectedRoll).length > 0) {
@@ -1723,15 +1783,21 @@ async function handleConnection(pixel) {
             // console.log(`=> rollState: ${state}`);
             // console.log(state);
 
-            if (pixel.dieType === "d10" || pixel.dieType === "d00") {
+            // if (pixel.dieType === "d10" || pixel.dieType === "d00") {
+            //     if (state.state === "rolling") {
+            //         // check if the other die (d10 or d00) is also rolling
+            //         for (let i = 0; i < window.pixels.length; i++) {
+            //             if ((pixel.dieType === "d00" && window.pixels[i].dieType === "d10" && window.pixels[i].status === "rolling")
+            //                 || (pixel.dieType === "d10" && window.pixels[i].dieType === "d00" && window.pixels[i].status === "rolling")) {
+            //                 d100RollHappening = true;
+            //             }
+            //         }
+            //     }
+            // }
+
+            if (pixel.dieType === "d00") {
                 if (state.state === "rolling") {
-                    // check if the other die (d10 or d00) is also rolling
-                    for (let i = 0; i < window.pixels.length; i++) {
-                        if ((pixel.dieType === "d00" && window.pixels[i].dieType === "d10" && window.pixels[i].status === "rolling")
-                            || (pixel.dieType === "d10" && window.pixels[i].dieType === "d00" && window.pixels[i].status === "rolling")) {
-                            d100RollHappening = true;
-                        }
-                    }
+                    d100RollHappening = true;
                 }
             }
 
@@ -2032,16 +2098,16 @@ function addPixelsInfoBox() {
     let div = document.createElement("div");
     div.className = "pixels-info-box";
 
-    div.innerHTML = '<div class="pixels-info-box__content"> <div class="pixels-info-box__content__title">Pixel Info</div> <div class="pixels-info-box__content__text"> <p id="pixel-amount" class="no-pixel-warning">You currently have no pixel dice connected!</p> <p class="todo_text">You currently have nothing to do!</p> </div> <div class="pixels-info-box__content__buttons_overview"> <button id="diceOverviewButton">Dice Overview</button> </div> <div class="pixels-info-box__content__buttons_target"> <button id="everyoneButton">Everyone</button> <button id="selfButton">Self</button> <button id="dmButton">DM</button> </div> <div class="pixels-info-box__content__buttons"> <button id="advButton">Adv.</button> <button id="critButton">Crit</button> <button id="disadvButton">Disadv.</button> </div> </div>';
+    div.innerHTML = '<div class="pixels-info-box__content"> <div class="pixels-info-box__content__title">Pixel Info</div> <div class="pixels-info-box__content__text"> <p id="pixel-amount" class="no-pixel-warning">You currently have no pixel dice connected!</p> <p class="todo_text">You currently have nothing to do!</p> </div> <div class="pixels-info-box__content__buttons_overview"> <button id="diceOverviewButton">Dice Overview & Settings</button> </div> <div class="pixels-info-box__content__buttons_target"> <button id="everyoneButton">Everyone</button> <button id="selfButton">Self</button> <button id="dmButton">DM</button> </div> <div class="pixels-info-box__content__buttons"> <button id="advButton">Adv.</button> <button id="critButton">Crit</button> <button id="disadvButton">Disadv.</button> </div> </div>';
     document.querySelector("body").appendChild(div);
 
     // add style to the info box (it should be on the left side of the page and be closed by default)
     // it should expand to the right when opened and be roughly 300px wide
 
     if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
-        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; min-width: 250px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 9999`);
+        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; min-width: 250px; height: 300px; background-color: rgba(0,0,0,0.90); z-index: 9999`);
     } else {
-        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 250px; background-color: rgba(0,0,0,0.90); z-index: 9999`);
+        GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 300px; background-color: rgba(0,0,0,0.90); z-index: 9999`);
     }
     if (isEncounterBuilder) {
         GM_addStyle(`.pixels-info-box { line-height: 1; }`);
@@ -2049,9 +2115,12 @@ function addPixelsInfoBox() {
     GM_addStyle(`.pixels-info-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
     GM_addStyle(`.pixels-info-box__content__title { position: absolute; top: 0%; left: 0%; width: 100%; height: 10%; font-size: 1.5em; text-align: center; color: white; cursor: move; }`);
     GM_addStyle(`.pixels-info-box__content__text { position: absolute; top: 10%; left: 0%; width: 100%; height: 80%; font-size: 1em; text-align: center; color: white; overflow-y:auto; }`);
+    GM_addStyle(`.pixels-info-box__content__custom_modifier { position: absolute; top: 45%; left: 0%; font-size: 1em; text-align: center; color: white; }`);
+    GM_addStyle(`.pixels-info-box__content__custom_modifier_text { position: absolute; top: 40%; height: 20%; font-size: 1em; text-align: center; color: white; }`);
+    GM_addStyle(`.pixels-info-box__content__custom_modifier_select { position: absolute; left: 80px; font-size: 1em; text-align: center; }`);
     GM_addStyle(`.pixels-info-box__content__buttons { position: absolute; top: 90%; left: 0%; width: 100%; height: 10%; }`);
-    GM_addStyle(`.pixels-info-box__content__buttons_target { position: absolute; top: 75%; left: 0%; width: 100%; height: 10%; }`);
-    GM_addStyle(`.pixels-info-box__content__buttons_overview { position: absolute; top: 60%; left: 0%; width: 100%; height: 10%; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons_target { position: absolute; top: 79%; left: 0%; width: 100%; height: 10%; }`);
+    GM_addStyle(`.pixels-info-box__content__buttons_overview { position: absolute; top: 68%; left: 0%; width: 100%; height: 10%; }`);
     GM_addStyle(`.pixels-info-box__content__buttons button, .pixels-info-box__content__buttons_target button { width: 30%; height: 100%; margin-left: 1%; background-color: darkgray; border: 2px solid; }`);
     GM_addStyle(`.pixels-info-box__content__buttons_overview button { width: 94%; height: 100%; margin-left: 1%; background-color: darkgray; border: 2px solid; }`);
     GM_addStyle(`.pixels-info-box__content__buttons #advButton { border-color: lime; }`);
@@ -2151,6 +2220,26 @@ function addPixelsInfoBox() {
     document.addEventListener('mouseup', () => {
         isDragging = false;
     });
+
+    setTimeout(() => {
+        addOrRemoveCustomModifiersDOM();
+    }, 50);
+}
+
+function addOrRemoveCustomModifiersDOM() {
+    if (enableCustomModifiers) {
+        let buttonsDiv = document.querySelector(".pixels-info-box__content__buttons_overview");
+
+        let customModifierDiv = document.createElement("div");
+        customModifierDiv.innerHTML = "<p id='customModifierText' class='pixels-info-box__content__custom_modifier_text'>Custom Modifier:</p> <select id='customModifierSelect' class='pixels-info-box__content__custom_modifier_select'><option value='-5'>-5</option><option value='-4'>-4</option><option value='-3'>-3</option><option value='-2'>-2</option><option value='-1'>-1</option><option value='0' selected>0</option><option value='1'>+1</option><option value='2'>+2</option><option value='3'>+3</option><option value='4'>+4</option><option value='5'>+5</option></select>";
+        customModifierDiv.classList.add("pixels-info-box__content__custom_modifier");
+
+        buttonsDiv.insertAdjacentElement("beforebegin", customModifierDiv);
+    } else {
+        try {
+            document.querySelector(".pixels-info-box__content__custom_modifier").remove();
+        } catch (error) { }
+    }
 }
 
 function addDiceOverviewBox() {
@@ -2159,7 +2248,7 @@ function addDiceOverviewBox() {
 
     // the box should have a title and a list of all dice that are currently connected
     let innerHTML = '<div class="dice-overview-box__content">';
-    innerHTML += '<div class="dice-overview-box__content__title">Dice Overview</div>';
+    innerHTML += '<div class="dice-overview-box__content__title">Dice Overview & Settings</div>';
     innerHTML += '<button id="closeDiceOverviewButton" class="dice-overview-box__button">X</button>';
     innerHTML += '<div class="dice-overview-box__content__features"> auto-reconnect is currently AUTO_STATUS </div>';
     innerHTML += '<div class="dice-overview-box__content__settings">';
@@ -2171,8 +2260,9 @@ function addDiceOverviewBox() {
     innerHTML += '<input type="checkbox" id="useCustomDebouncer" name="useCustomDebouncer"><label for="useCustomDebouncer"> Make false positives when rolling less likely</label><br>';
     innerHTML += '<input type="checkbox" id="ignoreRollsWhenTabInactive" name="ignoreRollsWhenTabInactive"><label for="ignoreRollsWhenTabInactive"> Ignore rolls when the tab is not open</label><br>';
     innerHTML += '<input type="checkbox" id="speakOnRoll" name="speakOnRoll"><label for="speakOnRoll"> Accessibility: Speak out results on roll with pixels dice</label><br>';
+    innerHTML += '<input type="checkbox" id="enableCustomModifiers" name="enableCustomModifiers"><label for="enableCustomModifiers"> Enable custom modifiers in pixel info box</label><br>';
     innerHTML += '</div></div>';
-    innerHTML += '<div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
+    innerHTML += '<div class="dice-overview-box__content__table"> <table id="diceTable"><tr><th>Type</th><th>Name</th><th>Connection Status</th><th>Roll Status</th><th>Battery</th><th>RSSI</th><th>Face</th><th>Action</th></tr></table> </div> </div>';
 
     if (!!navigator?.bluetooth?.getDevices) {
         innerHTML = innerHTML.replaceAll('AUTO_STATUS', '<span class="pixelsAutoReconnectStatus" style="color: lime">enabled</span>');
@@ -2226,6 +2316,14 @@ function addDiceOverviewBox() {
     GM_addStyle(`.dice-overview-box__content__table table td a:hover { cursor: pointer; color: yellow; }`);
     //make the box movable
     GM_addStyle(`.dice-overview-box { -webkit-app-region: drag; }`);
+
+    // add styles for RSSI
+    GM_addStyle(`.signal-container { display: flex; align-items: flex-end; justify-content: space-between; margin: 6px; }`);
+    GM_addStyle(`.bar { width: 8px; height: 8px; border: 1px solid white; background-color: transparent; }`);
+    GM_addStyle(`.filled { background-color: white; }`);
+    GM_addStyle(`.bar:nth-child(2) { height: 12px; }`);
+    GM_addStyle(`.bar:nth-child(3) { height: 16px; }`);
+    GM_addStyle(`.bar:nth-child(4) { height: 20px; }`);
 
 
     // the box should be closed by default
@@ -2281,6 +2379,14 @@ function addDiceOverviewBox() {
         localStorage.setItem("beyond20OldMethod", beyond20OldMethod);
     };
 
+    let enableCustomModifiersCheckbox = document.querySelector("#enableCustomModifiers");
+    enableCustomModifiersCheckbox.onclick = (e) => {
+        enableCustomModifiers = enableCustomModifiersCheckbox.checked;
+        localStorage.setItem("enableCustomModifiers", enableCustomModifiers);
+
+        addOrRemoveCustomModifiersDOM();
+    };
+
     // add style to the button (it should be in the top right corner of the box)
     GM_addStyle(`.dice-overview-box__button { position: absolute; top: 0%; right: 0%; width: 32px; height: 32px; border: 0; background-color: transparent; color: white; z-index: 9999`);
 }
@@ -2296,6 +2402,7 @@ function addDieToTable(pixel) {
     let connectionStatusCell = undefined;
     let rollStatusCell = undefined;
     let batteryCell = undefined;
+    let rssiCell = undefined;
     let faceCell = undefined;
     let actionCell = undefined;
 
@@ -2309,8 +2416,9 @@ function addDieToTable(pixel) {
         connectionStatusCell = newRow.insertCell(2);
         rollStatusCell = newRow.insertCell(3);
         batteryCell = newRow.insertCell(4);
-        faceCell = newRow.insertCell(5);
-        actionCell = newRow.insertCell(6);
+        rssiCell = newRow.insertCell(5);
+        faceCell = newRow.insertCell(6);
+        actionCell = newRow.insertCell(7);
     } else {
         newRow = document.getElementById("pixel" + pixel.pixelId);
         onlyUpdate = true;
@@ -2320,8 +2428,9 @@ function addDieToTable(pixel) {
         connectionStatusCell = newRow.children[2];
         rollStatusCell = newRow.children[3];
         batteryCell = newRow.children[4];
-        faceCell = newRow.children[5];
-        actionCell = newRow.children[6];
+        rssiCell = newRow.children[5];
+        faceCell = newRow.children[6];
+        actionCell = newRow.children[7];
     }
 
     if (!onlyUpdate) {
@@ -2356,7 +2465,10 @@ function addDieToTable(pixel) {
     connectionStatusCell.innerHTML = pixel.status;
     rollStatusCell.innerHTML = pixel.rollState;
     batteryCell.innerHTML = pixel.batteryLevel + "%";
+    rssiCell.innerHTML = '<div class="signal-container"> <div class="bar" id="bar1"></div> <div class="bar" id="bar2"></div> <div class="bar" id="bar3"></div> <div class="bar" id="bar4"></div></div>';
     faceCell.innerHTML = pixel.currentFace;
+
+    updateSignalStrength(rssiValueToLevel(pixel.rssi), newRow);
 
     if (!pixel.manualDisconnect) {
         setTimeout(() => {
@@ -2364,6 +2476,35 @@ function addDieToTable(pixel) {
         }, 300);
     } else {
         newRow.remove();
+    }
+}
+
+function rssiValueToLevel(rssiValue) {
+    if (rssiValue < -90) {
+        return 0;
+    } else if (rssiValue < -80) {
+        return 1;
+    } else if (rssiValue < -70) {
+        return 2;
+    } else if (rssiValue < -67) {
+        return 3;
+    } else {
+        return 4;
+    }
+}
+
+function updateSignalStrength(rssiLevel, tableRow) {
+    // Ensure that rssiLevel is between 0 and 4
+    rssiLevel = Math.max(0, Math.min(4, rssiLevel));
+
+    // Loop through each bar and fill them based on the rssiLevel
+    for (let i = 1; i <= 4; i++) {
+        let bar = tableRow.querySelector(`#bar${i}`);
+        if (i <= rssiLevel) {
+            bar.classList.add('filled');
+        } else {
+            bar.classList.remove('filled');
+        }
     }
 }
 
@@ -2655,6 +2796,7 @@ function checkForOpenGameLog() {
         if (!currentlyObserving) {
             currentlyObserving = true;
             observer.observe(gameLog, config);
+            scrollGameLogToBottom();
         }
 
         if (!currentlyUpdatingGameLog) {
@@ -3108,7 +3250,39 @@ function appendElementToGameLog(json) {
     //add .pixels-added-entry to the class list
     element.classList.add("pixels-added-entry");
 
-    gameLog.prepend(element);
+    // gameLog.prepend(element);
+    let previousElement = determineGameLogElementWithClosestTimestamp(json.dateTime);
+
+    if (previousElement !== null) {
+        gameLog.insertBefore(element, previousElement);
+    } else {
+        gameLog.prepend(element);
+    }
+    scrollGameLogToBottom();
+}
+
+function determineGameLogElementWithClosestTimestamp(timestamp) {
+    let gameLog = document.querySelector("[class*='GameLogEntries']");
+    let entries = gameLog.children;
+
+    let lastEntry;
+
+    for (let i = 0; i < entries.length; i++) {
+        let timestampOfEntry = new Date(entries[i].querySelector("time").getAttribute("datetime")).getTime();
+
+        if (timestampOfEntry < timestamp) {
+            return entries[i];
+        }
+
+        lastEntry = entries[i];
+    }
+
+    return lastEntry;
+}
+
+function scrollGameLogToBottom() {
+    let gameLog = document.querySelector("[class*='GameLogEntries']");
+    gameLog.parentElement.parentElement.parentElement.parentElement.parentElement.scrollTo(0, gameLog.scrollHeight);
 }
 
 function toISOStringWithTimezone(date) {
@@ -3504,3 +3678,6 @@ addBeyond20EventListener("rendered-roll", (...args) => {
 addBeyond20EventListener("NewSettings", settings => {
     beyond20Settings = settings;
 });
+
+// A huge thanks goes to all the people that have tested this integration on the Pixel's Discord server.
+// Without them, this integration would not be so refined as it is now.
