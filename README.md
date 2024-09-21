@@ -8,7 +8,7 @@ This is currently the only way to use Pixels with DnD Beyond, as DnD Beyond didn
 ## Video
 I made a short video that shows how to use the full chrome extension:
 
-[![Video](https://img.youtube.com/vi/_I-3SIao1Kk/0.jpg)](https://www.youtube.com/watch?v=_I-3SIao1Kk)
+[![Video](https://img.youtube.com/vi/BD9HNk6Net8/0.jpg)](https://www.youtube.com/watch?v=BD9HNk6Net8)
 
 ## Features
 - Can connect to Pixel dice
