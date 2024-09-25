@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0.0
+// @version      1.0.0.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -1256,8 +1256,10 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
                 json.data.rolls[0].result.text = "";
                 json.data.rolls[0].result.total = 0;
                 for (let i = 0; i < amount; i++) {
-                    clone.dieValue = multiRolls[i];
+                    // clone.dieValue = multiRolls[i];
+                    clone = JSON.parse(JSON.stringify(clone));
                     json.data.rolls[0].diceNotation.set[0].dice.push(clone);
+                    json.data.rolls[0].diceNotation.set[0].dice[i].dieValue = multiRolls[i];
                     json.data.rolls[0].result.values.push(multiRolls[i]);
                     json.data.rolls[0].result.text += multiRolls[i] + "+";
                     json.data.rolls[0].result.total += multiRolls[i];
@@ -1275,8 +1277,10 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
                 json.data.rolls[0].result.text = "";
                 json.data.rolls[0].result.total = 0;
                 for (let i = 0; i < amount; i++) {
-                    clone.dieValue = multiRolls[i];
+                    // clone.dieValue = multiRolls[i];
+                    clone = JSON.parse(JSON.stringify(clone));
                     json.data.rolls[0].diceNotation.set[0].dice.push(clone);
+                    json.data.rolls[0].diceNotation.set[0].dice[i].dieValue = multiRolls[i];
                     json.data.rolls[0].result.values.push(multiRolls[i]);
                     json.data.rolls[0].result.text += multiRolls[i] + "+";
                     json.data.rolls[0].result.total += multiRolls[i];
@@ -1293,8 +1297,10 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
         json.data.rolls[0].result.text = "";
         json.data.rolls[0].result.total = 0;
         for (let i = 0; i < amount; i++) {
-            clone.dieValue = multiRolls[i];
+            // clone.dieValue = multiRolls[i];
+            clone = JSON.parse(JSON.stringify(clone));
             json.data.rolls[0].diceNotation.set[0].dice.push(clone);
+            json.data.rolls[0].diceNotation.set[0].dice[i].dieValue = multiRolls[i];
             json.data.rolls[0].result.values.push(multiRolls[i]);
             json.data.rolls[0].result.text += multiRolls[i] + "+";
             json.data.rolls[0].result.total += multiRolls[i];
@@ -1326,8 +1332,12 @@ function buildRolledJson(dieType, rollId, dieValue, modifier = 0, amount = 1, ro
         json.data.rolls[0].result.text = "(" + firstPart + ")" + secondPart;
         if (rollkind === "disadvantage") {
             json.data.rolls[0].result.total = Math.min(...json.data.rolls[0].result.values) + modifier;
+            json.data.rolls[0].diceNotation.set[0].operand = 1;
+            json.data.rolls[0].diceNotation.set[0].operation = 1;
         } else {
             json.data.rolls[0].result.total = Math.max(...json.data.rolls[0].result.values) + modifier;
+            json.data.rolls[0].diceNotation.set[0].operand = 1;
+            json.data.rolls[0].diceNotation.set[0].operation = 2;
         }
     }
     if (rolltype !== "roll") {
