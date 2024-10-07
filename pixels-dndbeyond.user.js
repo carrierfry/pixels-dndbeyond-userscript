@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0.1
+// @version      1.0.0.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -3480,6 +3480,19 @@ function isRollFlat(element) {
 
 function cancelCurrentRoll() {
     currentlyExpectedRoll = {};
+    multiRolls = [];
+
+    doubledAmount = false;
+
+    nextAdvantageRoll = false;
+    nextDisadvantageRoll = false;
+    nextCriticalRoll = false;
+    nextEveryoneRoll = false;
+    nextSelfRoll = false;
+    nextDMRoll = false;
+
+    d100RollHappening = false;
+    d100RollParts = [];
 
     // uncolor buttons
     document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
