@@ -833,6 +833,8 @@ function addRollWithPixelButton(contextMenu) {
 
             let currentTarget = e.currentTarget;
 
+            cancelCurrentRoll();
+
             contextMenu.remove();
             let { adv, dis, crit, target, scope } = determineRollType(currentTarget);
 
@@ -1019,6 +1021,8 @@ function handleMouseLeave(e) {
                     e.stopPropagation();
                     e.stopImmediatePropagation();
                     console.log("Dice clicked");
+
+                    cancelCurrentRoll();
 
                     let modifier = getModifierFromButton(elClone);
                     let dieType = getDieTypeFromButton(elClone);
@@ -1956,6 +1960,8 @@ function addPixelModeButton() {
                     e.stopPropagation();
                     e.stopImmediatePropagation();
                     console.log("Dice clicked");
+
+                    cancelCurrentRoll();
 
                     let modifier = getModifierFromButton(elClone);
                     let dieType = getDieTypeFromButton(elClone);
@@ -3459,6 +3465,19 @@ function isRollFlat(element) {
 
 function cancelCurrentRoll() {
     currentlyExpectedRoll = {};
+    multiRolls = [];
+
+    doubledAmount = false;
+
+    nextAdvantageRoll = false;
+    nextDisadvantageRoll = false;
+    nextCriticalRoll = false;
+    nextEveryoneRoll = false;
+    nextSelfRoll = false;
+    nextDMRoll = false;
+
+    d100RollHappening = false;
+    d100RollParts = [];
 
     // uncolor buttons
     document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
