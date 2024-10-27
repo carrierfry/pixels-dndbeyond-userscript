@@ -454,6 +454,9 @@ let currentPixelRatio = ((window.outerWidth - 10) / window.innerWidth) * 100;
 
 let enableCustomModifiers = false;
 
+let deathSaveButtonVisible = false;
+let deathSaveButtonOrig = undefined;
+
 const callback = (mutationList, observer) => {
     for (const mutation of mutationList) {
         for (const addedNode of mutation.addedNodes) {
@@ -586,6 +589,7 @@ function main() {
                 setInterval(listenForLongHold, 300)
                 setInterval(listenForMouseOverOfNavItems, 300);
                 setInterval(listenForQuickNavMenu, 20);
+                setInterval(listenForDeathSaveButtonAppearing, 20);
                 setInterval(checkForHealthChange, 300);
                 setInterval(refreshRSSI, 30000);
             }
@@ -976,8 +980,34 @@ function listenForQuickNavMenu() {
     }
 }
 
+function listenForDeathSaveButtonAppearing() {
+    let deathSave = document.querySelector(".ct-health-manager__deathsaves-heading")
+    if (deathSave) {
+        let deathSaveButton = document.querySelector(".ct-health-manager__deathsaves-heading").querySelector(".integrated-dice__container");
+
+        if (!deathSaveButtonVisible && (deathSaveButton !== null)) {
+            deathSaveButtonVisible = true;
+
+            // deathSaveButtonOrig = deathSaveButton;
+            // deathSaveButton = deathSaveButton.cloneNode(true);
+            // deathSaveButton.addEventListener('click', handleRightClick);
+            // deathSaveButton.addEventListener('touchstart', handleLongHold);
+
+            applyClickHandlerToButton(deathSaveButton);
+
+            // replace the original button with the new one
+            // deathSave.replaceChild(deathSaveButton, deathSaveButtonOrig);
+        }
+    } else {
+        if (deathSaveButtonVisible) {
+            deathSaveButtonVisible = false;
+        }
+    }
+}
+
+
 function handleMouseEnter(e) {
-    if (!isMobileView && !isTabletView && !isEncounterBuilder) {
+    if (!isMobileView && !isTabletView && !isEncounterBuilder && e !== undefined) {
         e.preventDefault();
         e.stopPropagation();
     }
@@ -1000,7 +1030,7 @@ function handleMouseEnter(e) {
 }
 
 function handleMouseLeave(e) {
-    if (!isMobileView && !isTabletView && !isEncounterBuilder) {
+    if (!isMobileView && !isTabletView && !isEncounterBuilder && e !== undefined) {
         e.preventDefault();
         e.stopPropagation();
     }
@@ -1116,6 +1146,109 @@ function handleMouseLeave(e) {
     } else {
         alreadyHandledMouseLeave = false;
     }
+}
+
+function applyClickHandlerToButton(element) {
+    originalDiceClick.push(element);
+
+    let elClone = element.cloneNode(true);
+
+    element.parentNode.replaceChild(elClone, element);
+    function onClickHandler(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        console.log("Dice clicked");
+
+        cancelCurrentRoll();
+
+        let modifier = getModifierFromButton(elClone);
+        let dieType = getDieTypeFromButton(elClone);
+        let amount = getAmountFromButton(elClone);
+        let rollType = getRollTypeFromButton(elClone);
+        let rollName = getRollNameFromButton(elClone);
+        let damageType = getDamageTypeFromButton(elClone);
+
+        if (e.type === "contextmenu") {
+            elClone.parentNode.replaceChild(element, elClone);
+            lastRightClickedButton = element;
+            const event = new MouseEvent('contextmenu', {
+                bubbles: true
+            });
+            element.dispatchEvent(event);
+            swapButtonInterval = setInterval(() => {
+                checkIfDiceButtonCanBeSwappedAgain(element, elClone);
+            }, 50);
+            return;
+        }
+
+        if ((!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") || (dieType === "d20" && isRollFlat(elClone))) {
+            elClone.parentNode.replaceChild(element, elClone);
+            element.click();
+            element.parentNode.replaceChild(elClone, element);
+            return;
+        }
+
+        let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
+        if (isEncounterBuilder) {
+            nextSelfRoll = true;
+            target = getUserId();
+            scope = "userId";
+        }
+
+        currentlyExpectedRoll = {
+            "modifier": modifier,
+            "dieType": dieType,
+            "amount": amount,
+            "origAmount": amount,
+            "advantage": adv,
+            "disadvantage": dis,
+            "critical": crit,
+            "rollType": rollType,
+            "rollName": rollName,
+            "target": target,
+            "scope": scope,
+            "damageType": damageType
+        };
+
+        document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+        document.querySelector("#everyoneButton").style.backgroundColor = "white";
+        document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+        document.querySelector("#advButton").style.backgroundColor = "darkgray";
+        document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+        document.querySelector("#critButton").style.backgroundColor = "darkgray";
+
+        if (nextAdvantageRoll && !dis && !crit) {
+            currentlyExpectedRoll.advantage = true;
+        }
+        if (nextDisadvantageRoll && !adv && !crit) {
+            currentlyExpectedRoll.disadvantage = true;
+        }
+        if (nextCriticalRoll && !adv && !dis) {
+            currentlyExpectedRoll.critical = true;
+        }
+        if (nextEveryoneRoll) {
+            setRollTarget("everyoneButton");
+        }
+        if (nextSelfRoll) {
+            setRollTarget("selfButton");
+        }
+        if (nextDMRoll) {
+            setRollTarget("dmButton");
+        }
+
+
+        if (window.pixels !== undefined && pixels.length > 0) {
+            for (let i = 0; i < pixels.length; i++) {
+                if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
+                    lightUpPixel(pixels[i], "waitingForRoll");
+                }
+            }
+        }
+    };
+
+    elClone.onclick = onClickHandler;
+    elClone.addEventListener("contextmenu", onClickHandler);
 }
 
 function completelySwapButtons() {
@@ -1621,6 +1754,30 @@ function rollDice(realDieType, value) {
 
             if (beyond20Installed && !beyond20OldMethod) {
                 sendRollToBeyond20(rolledJson);
+            }
+
+            if (currentlyExpectedRoll.rollName === "Death" && currentlyExpectedRoll.rollType === "save") {
+                let addDeathSaveFail = document.querySelector(".ct-health-manager__deathsaves-group--fails").querySelector(".ct-health-manager__deathsaves-marks").children[2];
+                let removeDeathSaveFail = document.querySelector(".ct-health-manager__deathsaves-group--fails").querySelector(".ct-health-manager__deathsaves-marks").children[0];
+
+                let addDeathSaveSuccess = document.querySelector(".ct-health-manager__deathsaves-group--successes").querySelector(".ct-health-manager__deathsaves-marks").children[2];
+                let removeDeathSaveSuccess = document.querySelector(".ct-health-manager__deathsaves-group--successes").querySelector(".ct-health-manager__deathsaves-marks").children[0];
+
+                if (dieValue === 1) {
+                    addDeathSaveFail.click();
+                    setTimeout(() => {
+                        if (document.querySelector(".ct-health-manager__deathsaves-group--fails").querySelector(".ct-health-manager__deathsaves-marks").children[2].innerHTML === "") {
+                            document.querySelector(".ct-health-manager__deathsaves-group--fails").querySelector(".ct-health-manager__deathsaves-marks").children[2].click();
+                        }
+                    }, 10);
+                } else if (dieValue === 20) {
+                    document.querySelector(".ct-health-manager__adjuster-button--increase").querySelector("button").click();
+                    document.querySelector(".ct-health-manager__action").querySelector("button").click();
+                } else if (dieValue <= 10) {
+                    addDeathSaveFail.click();
+                } else if (dieValue >= 11) {
+                    addDeathSaveSuccess.click();
+                }
             }
 
             rolledJsonArray.push(rolledJson);
@@ -2627,7 +2784,11 @@ function getModifierFromButton(button) {
         modifier = button.firstChild.getAttribute("aria-label");
         if (modifier === null) {
             // modifier = button.firstChild.firstChild.innerHTML;
-            modifier = button.firstChild.innerText.replace("\n", "");
+            if (button.firstChild.nodeName !== "SPAN") {
+                modifier = "+0";
+            } else {
+                modifier = button.firstChild.innerText.replace("\n", "");
+            }
 
             if (modifier === undefined) {
                 modifier = button.firstChild.innerHTML;
@@ -2717,6 +2878,8 @@ function getRollNameFromButton(button) {
         potentialName = button.closest(".ct-spells-spell__damage").parentElement.children[1].firstChild.firstChild.innerText;
     } else if (button.closest(".ct-spells-spell__attacking") !== null) {
         potentialName = button.closest(".ct-spells-spell__attacking").parentElement.children[1].firstChild.firstChild.innerText;
+    } else if (button.closest(".ct-health-manager__deathsaves-heading") !== null) {
+        potentialName = "Death";
     } else if (isEncounterBuilder) {
         if (button.closest(".ability-block") !== null) {
             potentialName = button.closest(".ability-block__stat").querySelector(".ability-block__heading").innerText;
@@ -2761,6 +2924,8 @@ function getRollTypeFromButton(button) {
     } else if (button.closest(".ct-quick-info__ability") !== null || button.closest(".ct-main-mobile__ability") !== null || button.closest(".ct-main-tablet__ability") !== null) {
         potentialRollType = "check";
     } else if (button.closest(".ddbc-saving-throws-summary__ability-modifier") !== null) {
+        potentialRollType = "save";
+    } else if (button.closest(".ct-health-manager__deathsaves-heading") !== null) {
         potentialRollType = "save";
     } else if (button.closest(".ddbc-combat-attack__action") !== null) {
         potentialRollType = "to hit";
@@ -3456,7 +3621,7 @@ function speakRoll(rolledJson) {
 }
 
 function isRollFlat(element) {
-    if (element.innerText.includes("+") || element.innerText.includes("-") || element.innerText.includes("(")) {
+    if (element.innerText.includes("+") || element.innerText.includes("-") || element.innerText.includes("(") || element.innerText.includes("ROLL")) {
         return false;
     } else {
         return true;
