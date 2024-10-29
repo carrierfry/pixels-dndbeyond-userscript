@@ -1480,8 +1480,6 @@ function addPixelsLogoButton() {
 
         // create a link
         let link = document.createElement("a");
-        // link.className = "mm-nav-item__label mm-nav-item__label--link";
-        link.className = "_link_18gwk_21";
         if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
             link.className = "nav-list__item__label";
         }
@@ -1497,9 +1495,11 @@ function addPixelsLogoButton() {
         };
         button.appendChild(link);
         // find the last mm-nav-item and insert after it
-        let lastNavItem = document.querySelector("._content_18gwk_8").children;
+        let lastNavItem = document.querySelector("menu[class^='_content_'").children;
+        link.className = "_link_" + document.querySelector("menu[class^='_content_'").className.substring(9).slice(0, -2) + "_21";
         if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
             lastNavItem = document.querySelectorAll(".nav-list__item");
+            link.className = "";
         }
         lastNavItem = lastNavItem[lastNavItem.length - 1];
         lastNavItem.parentNode.insertBefore(button, lastNavItem.nextSibling);
@@ -1702,7 +1702,7 @@ function rollDice(realDieType, value) {
             }
             if (enableCustomModifiers) {
                 modifier += parseInt(document.getElementById("customModifierSelect").value);
-                document.getElementById("customModifierSelect").selectedIndex = 5;
+                document.getElementById("customModifierSelect").selectedIndex = 10;
             }
             if (Object.keys(currentlyExpectedRoll).length > 0) {
                 initJson = buildInitialJson(dieType, modifier, amount, getRollKind(), currentlyExpectedRoll.rollType, currentlyExpectedRoll.rollName, currentlyExpectedRoll.target, currentlyExpectedRoll.scope);
@@ -2404,7 +2404,7 @@ function addOrRemoveCustomModifiersDOM() {
         let buttonsDiv = document.querySelector(".pixels-info-box__content__buttons_overview");
 
         let customModifierDiv = document.createElement("div");
-        customModifierDiv.innerHTML = "<p id='customModifierText' class='pixels-info-box__content__custom_modifier_text'>Custom Modifier:</p> <select id='customModifierSelect' class='pixels-info-box__content__custom_modifier_select'><option value='-5'>-5</option><option value='-4'>-4</option><option value='-3'>-3</option><option value='-2'>-2</option><option value='-1'>-1</option><option value='0' selected>0</option><option value='1'>+1</option><option value='2'>+2</option><option value='3'>+3</option><option value='4'>+4</option><option value='5'>+5</option></select>";
+        customModifierDiv.innerHTML = "<p id='customModifierText' class='pixels-info-box__content__custom_modifier_text'>Custom Modifier:</p> <select id='customModifierSelect' class='pixels-info-box__content__custom_modifier_select'><option value='-10'>-10</option><option value='-9'>-9</option><option value='-8'>-8</option><option value='-7'>-7</option><option value='-6'>-6</option><option value='-5'>-5</option><option value='-4'>-4</option><option value='-3'>-3</option><option value='-2'>-2</option><option value='-1'>-1</option><option value='0' selected>0</option><option value='1'>+1</option><option value='2'>+2</option><option value='3'>+3</option><option value='4'>+4</option><option value='5'>+5</option><option value='6'>+6</option><option value='7'>+7</option><option value='8'>+8</option><option value='9'>+9</option><option value='10'>+10</option></select>";
         customModifierDiv.classList.add("pixels-info-box__content__custom_modifier");
 
         buttonsDiv.insertAdjacentElement("beforebegin", customModifierDiv);
