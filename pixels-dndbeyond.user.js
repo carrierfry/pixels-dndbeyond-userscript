@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1.3
+// @version      1.0.1.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -1997,10 +1997,10 @@ async function handleConnection(pixel) {
                 if ((state.state === "rolling" || state.state === "handling") && !pixel.currentlyRollingOrHandling) {
                     pixel.debounceTimeStart = Date.now();
                     pixel.currentlyRollingOrHandling = true;
-                } else if (!pixel.currentlyRollingOrHandling && state.state === "onFace") {
+                } else if (!pixel.currentlyRollingOrHandling && (state.state === "onFace" || state.state === "rolled")) {
                     pixel.debounceTimeStart = Date.now();
                     pixel.debounceTimeEnd = Date.now();
-                } else if (state.state === "onFace") {
+                } else if (state.state === "onFace" || state.state === "rolled") {
                     pixel.debounceTimeEnd = Date.now();
                     pixel.currentlyRollingOrHandling = false;
                 }
