@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1.2
+// @version      1.0.1.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -3592,7 +3592,7 @@ function checkIfEncounterBuilderIsLoaded() {
 
 function checkIfDieTypeIsConnected(dieType) {
     for (let i = 0; i < window.pixels.length; i++) {
-        if ((window.pixels[i].dieType === dieType || (window.pixels[i].dieType === "d6pipped" && dieType === "d6")) && window.pixels[i].isReady) {
+        if ((window.pixels[i].dieType === dieType || (window.pixels[i].dieType === "d6pipped" && dieType === "d6")) && window.pixels[0].status === "ready") {
             return true;
         }
     }
