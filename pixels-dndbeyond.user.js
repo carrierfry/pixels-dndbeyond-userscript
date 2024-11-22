@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1.1
+// @version      1.0.1.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -15,8 +15,8 @@
 // @grant        none
 // @updateURL    https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js
 // @downloadURL  https://github.com/carrierfry/pixels-dndbeyond-userscript/raw/main/pixels-dndbeyond.user.js
-// @require      https://unpkg.com/@systemic-games/pixels-web-connect@1.2.2/dist/umd/index.js
-// @require      https://unpkg.com/@systemic-games/pixels-edit-animation@1.2.2/dist/umd/index.js
+// @require      https://unpkg.com/@systemic-games/pixels-web-connect@1.3.1/dist/umd/index.js
+// @require      https://unpkg.com/@systemic-games/pixels-edit-animation@1.3.0/dist/umd/index.js
 // ==/UserScript==
 
 const { repeatConnect, requestPixel, getPixel, Color } = pixelsWebConnect;
