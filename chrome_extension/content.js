@@ -1976,10 +1976,10 @@ async function handleConnection(pixel) {
                 if ((state.state === "rolling" || state.state === "handling") && !pixel.currentlyRollingOrHandling) {
                     pixel.debounceTimeStart = Date.now();
                     pixel.currentlyRollingOrHandling = true;
-                } else if (!pixel.currentlyRollingOrHandling && state.state === "onFace") {
+                } else if (!pixel.currentlyRollingOrHandling && (state.state === "onFace" || state.state === "rolled")) {
                     pixel.debounceTimeStart = Date.now();
                     pixel.debounceTimeEnd = Date.now();
-                } else if (state.state === "onFace") {
+                } else if (state.state === "onFace" || state.state === "rolled") {
                     pixel.debounceTimeEnd = Date.now();
                     pixel.currentlyRollingOrHandling = false;
                 }
@@ -3571,7 +3571,7 @@ function checkIfEncounterBuilderIsLoaded() {
 
 function checkIfDieTypeIsConnected(dieType) {
     for (let i = 0; i < window.pixels.length; i++) {
-        if ((window.pixels[i].dieType === dieType || (window.pixels[i].dieType === "d6pipped" && dieType === "d6")) && window.pixels[i].isReady) {
+        if ((window.pixels[i].dieType === dieType || (window.pixels[i].dieType === "d6pipped" && dieType === "d6")) && window.pixels[0].status === "ready") {
             return true;
         }
     }
