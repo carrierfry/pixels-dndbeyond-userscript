@@ -1,5 +1,5 @@
 # Pixels DnD Beyond integration
-[![Chrome Web Store](https://storage.googleapis.com/web-dev-uploads/image/WlD8wC6g8khYWPJUsQceQkhXSlv1/UV4C4ybeBTsZt43U4xis.png)](https://chromewebstore.google.com/detail/pixels-dndbeyond-integrat/dldknofeibljjommedjjegffjlemgack)
+[![Chrome Web Store](https://developer.chrome.com/static/docs/webstore/branding/image/206x58-chrome-web-bcb82d15b2486.png)](https://chromewebstore.google.com/detail/pixels-dndbeyond-integrat/dldknofeibljjommedjjegffjlemgack)
 
 This is a userscript that integrates [Pixels](https://gamewithpixels.com/) into [DnD Beyond](https://www.dndbeyond.com/) by making it possible to throw pixel dice and submit the result to DnD Beyond.
 
