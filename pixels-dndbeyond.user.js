@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1.4
+// @version      1.0.1.5
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -1652,6 +1652,7 @@ function rollDice(realDieType, value) {
     let amount = 1;
     let forcedMultiRoll = false;
     let dieType = realDieType;
+    let dieValue = 0;
 
     if (requireTabOpen && document.hidden) {
         return;
@@ -1663,6 +1664,11 @@ function rollDice(realDieType, value) {
             last2D20Rolls.shift();
         }
     }
+
+    if (dieType === "d10" && value === 0 && !d100RollHappening) {
+        value = 10;
+    }
+
 
     if (Object.keys(currentlyExpectedRoll).length !== 0) {
         if (currentlyExpectedRoll.dieType !== dieType) {
@@ -1706,7 +1712,7 @@ function rollDice(realDieType, value) {
             d100RollParts.push(value);
             console.log("waiting for second d100 roll part");
         } else {
-            let dieValue = 0;
+
             if (d100RollHappening && d100RollParts.length === 1) {
                 d100RollParts.push(value);
                 let d100Value = d100RollParts[0] + d100RollParts[1];
@@ -1736,7 +1742,7 @@ function rollDice(realDieType, value) {
             }
 
             if (value === undefined) {
-                Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
+                dieValue = Math.floor(Math.random() * diceTypes[dieType].result.total) + 1;
             } else {
                 if (dieType !== "d100") {
                     dieValue = value;
