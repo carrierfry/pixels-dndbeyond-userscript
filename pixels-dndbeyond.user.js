@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1.5
+// @version      1.0.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -3888,6 +3888,13 @@ function sendRollToBeyond20(rolledJson) {
     if ((beyond20CustomRollNoSend && Object.keys(currentlyExpectedRoll).length === 0) || (rolledJson.messageScope === "userId" && rolledJson.messageTarget === getUserId() && !isEncounterBuilder)) {
         return;
     }
+
+    if (renderedRoll.damage_rolls.length > 0) {
+        renderedRoll.html = `<div class=\"beyond20-message\"><div class=\"beyond20-header\"><details><summary><a>${renderedRoll.request.name}</a></summary></details></div><div class='beyond20-roll-result beyond20-roll-damage'><b>${renderedRoll.damage_rolls[0][0]}: </b><span class='beyond20-tooltip'><span class='beyond20-roll-value beyond20-roll-detail-normal beyond20-roll-total dice-total'>${renderedRoll.damage_rolls[0][1].total}</span><span class='dice-roll beyond20-tooltip-content'><div class='dice-formula beyond20-roll-formula'>${renderedRoll.damage_rolls[0][1].formula}</div><div class='beyond20-roll-tooltip'><div class='beyond20-roll-dice'><div class='beyond20-roll-dice-formula'>${renderedRoll.damage_rolls[0][1].parts[0].formula}</div><div class='beyond20-roll-dice-rolls'><span class='beyond20-roll-die-result beyond20-roll-detail-normal'>${renderedRoll.damage_rolls[0][1].parts[0].total}</span></div></div></div></span></span></div></div>`;
+    } else {
+        renderedRoll.html = `<div class="beyond20-message"><div class="beyond20-header"><span class='beyond20-title'>${renderedRoll.title}</span></div><div class='beyond20-roll-result beyond20-roll-cells'><div class="beyond20-roll-cell"><span class='beyond20-tooltip'><span class='beyond20-roll-value beyond20-roll-detail-normal beyond20-roll-total dice-total'>${renderedRoll.attack_rolls[0].total}</span><span class='dice-roll beyond20-tooltip-content'><div class='dice-formula beyond20-roll-formula'>${renderedRoll.attack_rolls[0].formula}</div><div class='beyond20-roll-tooltip'><div class='beyond20-roll-dice'><div class='beyond20-roll-dice-formula'>${renderedRoll.attack_rolls[0].formula}</div><div class='beyond20-roll-dice-rolls'><span class='beyond20-roll-die-result beyond20-roll-detail-normal'>${renderedRoll.attack_rolls[0].parts[0].total}</span></div></div></div></span></span></div></div></div>`;
+    }
+
     sendBeyond20Event("SendMessage", renderedRoll);
 }
 
