@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.2
+// @version      1.0.2.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -1002,9 +1002,9 @@ function listenForQuickNavMenu() {
 }
 
 function listenForDeathSaveButtonAppearing() {
-    let deathSave = document.querySelector(".ct-health-manager__deathsaves-heading")
+    let deathSave = document.querySelector(".b20-health-manage-pane");
     if (deathSave) {
-        let deathSaveButton = document.querySelector(".ct-health-manager__deathsaves-heading").querySelector(".integrated-dice__container");
+        let deathSaveButton = document.querySelector(".b20-health-manage-pane").querySelector("button");
 
         if (!deathSaveButtonVisible && (deathSaveButton !== null)) {
             deathSaveButtonVisible = true;
@@ -1784,22 +1784,20 @@ function rollDice(realDieType, value) {
             }
 
             if (currentlyExpectedRoll.rollName === "Death" && currentlyExpectedRoll.rollType === "save") {
-                let addDeathSaveFail = document.querySelector(".ct-health-manager__deathsaves-group--fails").querySelector(".ct-health-manager__deathsaves-marks").children[2];
-                let removeDeathSaveFail = document.querySelector(".ct-health-manager__deathsaves-group--fails").querySelector(".ct-health-manager__deathsaves-marks").children[0];
+                let addDeathSaveFail = document.querySelector("div[data-testid='fails-group'").children[1].children[2];
 
-                let addDeathSaveSuccess = document.querySelector(".ct-health-manager__deathsaves-group--successes").querySelector(".ct-health-manager__deathsaves-marks").children[2];
-                let removeDeathSaveSuccess = document.querySelector(".ct-health-manager__deathsaves-group--successes").querySelector(".ct-health-manager__deathsaves-marks").children[0];
+                let addDeathSaveSuccess = document.querySelector("div[data-testid='successes-group'").children[1].children[2];
 
                 if (dieValue === 1) {
                     addDeathSaveFail.click();
                     setTimeout(() => {
-                        if (document.querySelector(".ct-health-manager__deathsaves-group--fails").querySelector(".ct-health-manager__deathsaves-marks").children[2].innerHTML === "") {
-                            document.querySelector(".ct-health-manager__deathsaves-group--fails").querySelector(".ct-health-manager__deathsaves-marks").children[2].click();
+                        if (document.querySelector("div[data-testid='fails-group'").children[1].children[2].innerHTML === "") {
+                            document.querySelector("div[data-testid='fails-group'").children[1].children[2].click();
                         }
                     }, 10);
                 } else if (dieValue === 20) {
-                    document.querySelector(".ct-health-manager__adjuster-button--increase").querySelector("button").click();
-                    document.querySelector(".ct-health-manager__action").querySelector("button").click();
+                    document.querySelector("button[aria-label='Increase Hit Points']").click();
+                    document.querySelector("div[class*=styles_applyButtons]").firstChild.click();
                 } else if (dieValue <= 10) {
                     addDeathSaveFail.click();
                 } else if (dieValue >= 11) {
@@ -2905,7 +2903,7 @@ function getRollNameFromButton(button) {
         potentialName = button.closest(".ct-spells-spell__damage").parentElement.children[1].firstChild.firstChild.innerText;
     } else if (button.closest(".ct-spells-spell__attacking") !== null) {
         potentialName = button.closest(".ct-spells-spell__attacking").parentElement.children[1].firstChild.firstChild.innerText;
-    } else if (button.closest(".ct-health-manager__deathsaves-heading") !== null) {
+    } else if (button.closest(".b20-health-manage-pane") !== null) {
         potentialName = "Death";
     } else if (isEncounterBuilder) {
         if (button.closest(".ability-block") !== null) {
@@ -2952,7 +2950,7 @@ function getRollTypeFromButton(button) {
         potentialRollType = "check";
     } else if (button.closest(".ddbc-saving-throws-summary__ability-modifier") !== null) {
         potentialRollType = "save";
-    } else if (button.closest(".ct-health-manager__deathsaves-heading") !== null) {
+    } else if (button.closest(".b20-health-manage-pane") !== null) {
         potentialRollType = "save";
     } else if (button.closest(".ddbc-combat-attack__action") !== null) {
         potentialRollType = "to hit";
@@ -3190,7 +3188,7 @@ function determineRollType(rollButton) {
             if (isEncounterBuilder && target === 0) {
                 list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.firstChild;
             } else {
-                list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.nextSibling.nextSibling.firstChild; // ul
+                list = rollButton.parentElement.querySelector("ul").children[3].firstChild; // ul
             }
         } else {
             list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.firstChild;
@@ -3218,7 +3216,7 @@ function determineRollType(rollButton) {
         }
 
 
-        list = rollButton.previousSibling.previousSibling.children[1].firstChild; // ul
+        list = rollButton.parentElement.querySelector("ul").children[1].firstChild; // ul
         if (list !== null) {
             let children = list.children;
             //children.forEach((element) => {
