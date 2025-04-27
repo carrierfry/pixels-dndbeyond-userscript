@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.2.3
+// @version      1.0.2.4
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -561,6 +561,11 @@ function main() {
         console.log("socket not ready");
         setTimeout(main, 500);
         socketRetryCount++;
+        return;
+    }
+
+    if (navigator.bluetooth === undefined) {
+        alert("Bluetooth functionality is disabled in your Browser. Make sure the chrome flag chrome://flags/#enable-web-bluetooth-confirm-pairing-support is enabled!");
         return;
     }
 
