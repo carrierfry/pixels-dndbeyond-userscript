@@ -787,11 +787,11 @@ function checkForTodo() {
 }
 
 function checkForHealthChange() {
-    let element = document.querySelector('div[aria-labelledby="ct-health-summary-current-label ct-health-summary-label"]');
+    let element = document.querySelector("[aria-label^='Current hit points']").nextSibling;
     if (element === null) {
         element = document.querySelector(".ct-status-summary-mobile__hp-current");
     }
-    if (element !== null) {
+    if (element !== null && document.querySelector("div[class^='styles_deathSaves'") === null) {
         let currentHealth = parseInt(element.innerText);
 
         if (lastHealth === -1) {
@@ -800,12 +800,12 @@ function checkForHealthChange() {
 
         if (currentHealth < lastHealth) {
             lightUpAllPixels("damage");
+            lastHealth = currentHealth;
         } else if (currentHealth > lastHealth) {
             lightUpAllPixels("heal");
+            lastHealth = currentHealth;
         }
-
-        lastHealth = currentHealth;
-    } else if (document.querySelector(".ct-health-summary__deathsaves-icon") !== null && lastHealth > 0) {
+    } else if (document.querySelector("div[class^='styles_deathSaves'") !== null && lastHealth > 0) {
         lightUpAllPixels("damage");
 
         lastHealth = 0;
