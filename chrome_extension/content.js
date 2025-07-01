@@ -543,6 +543,11 @@ function main() {
         return;
     }
 
+    if (navigator.bluetooth === undefined) {
+        alert("Bluetooth functionality is disabled in your Browser. Make sure the chrome flag chrome://flags/#enable-web-bluetooth-confirm-pairing-support is enabled!");
+        return;
+    }
+
     navigator.bluetooth.getAvailability().then(isBluetoothAvailable => {
         if (isBluetoothAvailable) {
             setTimeout(() => {
@@ -787,28 +792,30 @@ function checkForTodo() {
 }
 
 function checkForHealthChange() {
-    let element = document.querySelector("[aria-label^='Current hit points']").nextSibling;
-    if (element === null) {
-        element = document.querySelector(".ct-status-summary-mobile__hp-current");
-    }
-    if (element !== null && document.querySelector("div[class^='styles_deathSaves'") === null) {
-        let currentHealth = parseInt(element.innerText);
-
-        if (lastHealth === -1) {
-            lastHealth = currentHealth;
+    if (!isEncounterBuilder) {
+        let element = document.querySelector("[aria-label^='Current hit points']").nextSibling;
+        if (element === null) {
+            element = document.querySelector(".ct-status-summary-mobile__hp-current");
         }
+        if (element !== null && document.querySelector("div[class^='styles_deathSaves'") === null) {
+            let currentHealth = parseInt(element.innerText);
 
-        if (currentHealth < lastHealth) {
+            if (lastHealth === -1) {
+                lastHealth = currentHealth;
+            }
+
+            if (currentHealth < lastHealth) {
+                lightUpAllPixels("damage");
+                lastHealth = currentHealth;
+            } else if (currentHealth > lastHealth) {
+                lightUpAllPixels("heal");
+                lastHealth = currentHealth;
+            }
+        } else if (document.querySelector("div[class^='styles_deathSaves'") !== null && lastHealth > 0) {
             lightUpAllPixels("damage");
-            lastHealth = currentHealth;
-        } else if (currentHealth > lastHealth) {
-            lightUpAllPixels("heal");
-            lastHealth = currentHealth;
-        }
-    } else if (document.querySelector("div[class^='styles_deathSaves'") !== null && lastHealth > 0) {
-        lightUpAllPixels("damage");
 
-        lastHealth = 0;
+            lastHealth = 0;
+        }
     }
 }
 
@@ -949,7 +956,7 @@ function listenForMouseOverOfNavItems() {
             element.addEventListener('mouseleave', handleMouseLeave);
         });
 
-        let optionsHeader = document.querySelectorAll(".ddbc-tab-options__header");
+        let optionsHeader = Array.from(document.querySelector("[class^='styles_buttons']").children);
         optionsHeader.forEach((element) => {
             element.removeEventListener('mouseenter', handleMouseEnter);
             element.removeEventListener('mouseleave', handleMouseLeave);
