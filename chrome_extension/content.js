@@ -1526,7 +1526,7 @@ function getCharacterName() {
     if (isEncounterBuilder) {
         name = document.querySelector(".mon-stat-block__name");
     } else {
-        name = document.querySelector("[class*='ddb-character-app-']");
+        name = document.querySelector("[class*='characterName']").innerText;
     }
     return name.innerText;
 }
