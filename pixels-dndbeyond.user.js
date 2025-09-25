@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.2.5
+// @version      1.0.2.6
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -1547,7 +1547,7 @@ function getCharacterName() {
     if (isEncounterBuilder) {
         name = document.querySelector(".mon-stat-block__name");
     } else {
-        name = document.querySelector("[class*='ddb-character-app-']");
+        name = document.querySelector("[class*='characterName']").innerText;
     }
     return name.innerText;
 }
