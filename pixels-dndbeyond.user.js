@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.2.7
+// @version      1.0.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -1533,8 +1533,8 @@ function addPixelsLogoButton() {
 
         if (!isMap) {
             // find the last mm-nav-item and insert after it
-            let lastNavItem = document.querySelector("menu[class^='_content_'").children;
-            link.className = "_link_" + document.querySelector("menu[class^='_content_'").className.substring(9).slice(0, -2) + "_21";
+            let lastNavItem = document.querySelector("#mega-menu-target > header > div > div > nav > ul").children;
+            link.className = document.querySelector("#mega-menu-target > header > div > div > nav > ul").lastChild.firstChild.className;;
             if (isMobileView || isTabletView || isMap || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
                 lastNavItem = document.querySelectorAll(".nav-list__item");
                 link.className = "";
