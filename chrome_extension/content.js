@@ -437,6 +437,7 @@ let swapButtonInterval = null;
 let currentlySwapped = false;
 
 let isEncounterBuilder = false;
+let isMap = false;
 
 let alreadyHandledMouseLeave = false;
 
@@ -523,7 +524,13 @@ navigation.addEventListener("navigate", (event) => {
 
 // Main function
 function main() {
-    if (!window.location.href.includes("combat-tracker")) {
+    if (window.location.href.includes("games")) {
+        isMap = true;
+        if (!checkIfMapIsLoaded()) {
+            setTimeout(main, 500);
+            return;
+        }
+    } else if (!window.location.href.includes("combat-tracker")) {
         if (!checkIfCharacterSheetLoaded()) {
             setTimeout(main, 500);
             return;
@@ -551,7 +558,7 @@ function main() {
     navigator.bluetooth.getAvailability().then(isBluetoothAvailable => {
         if (isBluetoothAvailable) {
             setTimeout(() => {
-                if (socket && socket.readyState === 1 && !isEncounterBuilder) {
+                if (socket && socket.readyState === 1 && !isEncounterBuilder && !isMap) {
                     getCompleteCharacterData();
                 }
             }, 1000);
@@ -561,7 +568,7 @@ function main() {
                 window.pixels = [];
             }
 
-            if (!isEncounterBuilder) {
+            if (!isEncounterBuilder && !isMap) {
                 let color;
                 if (isTabletView) {
                     color = window.getComputedStyle(document.querySelector(".ct-character-header-tablet__button")).getPropertyValue("border-color");
@@ -792,7 +799,7 @@ function checkForTodo() {
 }
 
 function checkForHealthChange() {
-    if (!isEncounterBuilder) {
+    if (!isEncounterBuilder && !isMap) {
         let element = document.querySelector("[aria-label^='Current hit points']").nextSibling;
         if (element === null) {
             element = document.querySelector(".ct-status-summary-mobile__hp-current");
@@ -937,7 +944,7 @@ function handleLongHold(e) {
 }
 
 function listenForMouseOverOfNavItems() {
-    if (isEncounterBuilder) {
+    if (isEncounterBuilder || isMap) {
         // let combatants = document.querySelectorAll(".combat-tracker__combatants");
         // combatants.forEach((element) => {
         //     element.removeEventListener('mouseenter', handleMouseEnter);
@@ -1481,13 +1488,13 @@ function addPixelsLogoButton() {
     if (!doneOnlyOnceStuff) {
         let button = document.createElement("li");
         button.className = "mm-nav-item";
-        if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+        if (isMobileView || isTabletView || isMap || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
             button.className = "nav-list__item nav-list__item--connect-to-pixels";
         }
 
         // create a link
         let link = document.createElement("a");
-        if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+        if (isMobileView || isTabletView || isMap || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
             link.className = "nav-list__item__label";
         }
         // prevent the link from navigating
@@ -1501,15 +1508,21 @@ function addPixelsLogoButton() {
             requestMyPixel();
         };
         button.appendChild(link);
-        // find the last mm-nav-item and insert after it
-        let lastNavItem = document.querySelector("menu[class^='_content_'").children;
-        link.className = "_link_" + document.querySelector("menu[class^='_content_'").className.substring(9).slice(0, -2) + "_21";
-        if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
-            lastNavItem = document.querySelectorAll(".nav-list__item");
-            link.className = "";
+
+        if (!isMap) {
+            // find the last mm-nav-item and insert after it
+            let lastNavItem = document.querySelector("#mega-menu-target > header > div > div > nav > ul").children;
+            link.className = document.querySelector("#mega-menu-target > header > div > div > nav > ul").lastChild.firstChild.className;;
+            if (isMobileView || isTabletView || isMap || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+                lastNavItem = document.querySelectorAll(".nav-list__item");
+                link.className = "";
+            }
+            lastNavItem = lastNavItem[lastNavItem.length - 1];
+            lastNavItem.parentNode.insertBefore(button, lastNavItem.nextSibling);
+        } else {
+            let menuBar = document.querySelector("[class*='styles_scenarioMenuEncounters'");
+            menuBar.append(button)
         }
-        lastNavItem = lastNavItem[lastNavItem.length - 1];
-        lastNavItem.parentNode.insertBefore(button, lastNavItem.nextSibling);
     }
 }
 
@@ -1525,8 +1538,10 @@ function getCharacterName() {
     let name;
     if (isEncounterBuilder) {
         name = document.querySelector(".mon-stat-block__name");
+    } else if (isMap) {
+        return "Dungeon Master";
     } else {
-        name = document.querySelector("[class*='characterName']").innerText;
+        return document.querySelector("[class*='characterName']").innerText;
     }
     return name.innerText;
 }
@@ -1543,6 +1558,11 @@ function getGameId() {
         } else {
             lastGameId = 0;
         }
+    } else if (isMap) {
+        let url = window.location.href;
+        const match = url.match(/\/games\/(\d+)/);
+        gameId = match[1];
+        lastGameId = gameId;
     } else {
         if (!isMobileView && !isTabletView) {
             gameId = document.querySelector(".ddbc-tooltip").firstChild;
@@ -1565,11 +1585,11 @@ function getUserId() {
 function getAvatarUrl() {
     let avatar;
     if (!isEncounterBuilder) {
-        avatar = document.querySelector(".ddbc-character-avatar__portrait").getAttribute("style");
+        avatar = document.querySelector(".ddbc-character-avatar__portrait");
         if (avatar === null) {
             return null;
         }
-        avatar = avatar.split("url(\"")[1].split("\")")[0];
+        avatar = avatar.src;
     } else {
         let allCharacters = document.querySelectorAll(".combatant-summary__name");
         allCharacters.forEach((element) => {
@@ -2032,7 +2052,7 @@ async function handleConnection(pixel) {
 
 function addPixelModeButton() {
     let div = document.createElement("div");
-    if (isEncounterBuilder) {
+    if (isEncounterBuilder || isMap) {
         div.className = "ddbeb-button ddbeb-button--pixels";
     } else if (isTabletView) {
         div.className = "ct-character-header-tablet__group ct-character-header-tablet__group--pixels";
@@ -2047,11 +2067,16 @@ function addPixelModeButton() {
 
     if (isEncounterBuilder) {
         div.innerHTML = '<div class="ct-character-header-desktop__button" role="button" tabindex="0"><span class="ct-character-header-desktop__button-label">Pixel Mode</span></div>';
+    } else if (isMap) {
+        div.innerHTML = '<div class="ct-character-header-desktop__button" role="button" tabindex="0"><span class="ct-character-header-desktop__button-label">Pixel Mode</span></div>';
     } else {
         div.innerHTML = '<div class="ct-character-header-desktop__button" role="button" tabindex="0"> <div class="ct-character-header-desktop__button-icon"> <img id="red-pixel-icon" src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/img/white.png" width="16px" height="16px"> </div> <span class="ct-character-header-desktop__button-label">Pixel Mode</span> </div>'
     }
+
     if (isEncounterBuilder) {
         document.querySelector(".combat-tracker__header").appendChild(div);
+    } else if (isMap) {
+        document.querySelector("[class*='styles_scenarioMenuEncounters'").appendChild(div);
     } else if (isTabletView) {
         document.querySelector(".ct-character-header-tablet__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-tablet__group--short-rest"));
     } else if (isMobileView) {
@@ -2288,12 +2313,12 @@ function addPixelsInfoBox() {
     // add style to the info box (it should be on the left side of the page and be closed by default)
     // it should expand to the right when opened and be roughly 300px wide
 
-    if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+    if (isMobileView || isTabletView || isMap || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
         GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; min-width: 250px; height: 300px; background-color: rgba(0,0,0,0.90); z-index: 9999`);
     } else {
         GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 300px; background-color: rgba(0,0,0,0.90); z-index: 9999`);
     }
-    if (isEncounterBuilder) {
+    if (isEncounterBuilder || isMap) {
         GM_addStyle(`.pixels-info-box { line-height: 1; }`);
     }
     GM_addStyle(`.pixels-info-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
@@ -2358,7 +2383,7 @@ function addPixelsInfoBox() {
     document.querySelector("body").appendChild(button);
 
     // add style to the button
-    if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+    if (isMobileView || isTabletView || isMap || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
         // make button in top middle
         GM_addStyle(`.pixels-info-box__button { position: fixed; top: 6px; left: calc(50% - 16px); width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 9999`);
     } else {
@@ -2479,12 +2504,12 @@ function addDiceOverviewBox() {
 
     // add style to the info box (it should be in the middle of the page and be closed by default)
 
-    if (isMobileView || isTabletView || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+    if (isMobileView || isTabletView || isMap || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
         GM_addStyle(`.dice-overview-box { position: fixed; line-height: 1; top: 50%; left: 50%; width: 95%; height: 95%; background-color: rgba(0,0,0,0.95); z-index: 9999; transform: translate(-50%, -50%); }`);
     } else {
         GM_addStyle(`.dice-overview-box { position: fixed; line-height: 1; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 9999; transform: translate(-50%, -50%); }`);
     }
-    if (isEncounterBuilder) {
+    if (isEncounterBuilder || isMap) {
         GM_addStyle(`.dice-overview-box { line-height: 1; }`);
     }
     GM_addStyle(`.dice-overview-box__content { position: absolute; top: 0%; left: 5%; width: 90%; right: 5%; height: 100%; }`);
@@ -3572,6 +3597,13 @@ function checkIfCharacterSheetLoaded() {
     }
 }
 
+function checkIfMapIsLoaded() {
+    if (document.querySelector("[data-testid='bottomRightTools'") !== null) {
+        return true;
+    }
+    return false;
+}
+
 function checkIfEncounterBuilderIsLoaded() {
     if (document.querySelector(".combat-tracker-page__content-section") !== null) {
         return true;
@@ -3873,10 +3905,15 @@ function sendRollToBeyond20(rolledJson) {
         return;
     }
 
+    let avatarHTML = "";
+    if (getAvatarUrl() !== undefined && getAvatarUrl() !== null) {
+        avatarHTML = `<img class="beyond20-character-avatar" src="${getAvatarUrl()}" title="${renderedRoll.title}" width="37" height="37"></img>`;
+    }
+
     if (renderedRoll.damage_rolls.length > 0) {
-        renderedRoll.html = `<div class=\"beyond20-message\"><div class=\"beyond20-header\"><details><summary><a>${renderedRoll.request.name}</a></summary></details></div><div class='beyond20-roll-result beyond20-roll-damage'><b>${renderedRoll.damage_rolls[0][0]}: </b><span class='beyond20-tooltip'><span class='beyond20-roll-value beyond20-roll-detail-normal beyond20-roll-total dice-total'>${rolledJson.data.rolls[0].result.total}</span><span class='dice-roll beyond20-tooltip-content'><div class='dice-formula beyond20-roll-formula'>${renderedRoll.damage_rolls[0][1].formula}</div><div class='beyond20-roll-tooltip'><div class='beyond20-roll-dice'><div class='beyond20-roll-dice-formula'>${renderedRoll.damage_rolls[0][1].parts[0].formula}</div><div class='beyond20-roll-dice-rolls'><span class='beyond20-roll-die-result beyond20-roll-detail-normal'>${rolledJson.data.rolls[0].result.total - rolledJson.data.rolls[0].result.constant}</span></div></div></div></span></span></div></div>`;
+        renderedRoll.html = `<div class=\"beyond20-message\"><div class=\"beyond20-header\">${avatarHTML}<details><summary><a>${renderedRoll.request.name}</a></summary></details></div><div class='beyond20-roll-result beyond20-roll-damage'><b>${renderedRoll.damage_rolls[0][0]}: </b><span class='beyond20-tooltip'><span class='beyond20-roll-value beyond20-roll-detail-normal beyond20-roll-total dice-total'>${rolledJson.data.rolls[0].result.total}</span><span class='dice-roll beyond20-tooltip-content'><div class='dice-formula beyond20-roll-formula'>${renderedRoll.damage_rolls[0][1].formula}</div><div class='beyond20-roll-tooltip'><div class='beyond20-roll-dice'><div class='beyond20-roll-dice-formula'>${renderedRoll.damage_rolls[0][1].parts[0].formula}</div><div class='beyond20-roll-dice-rolls'><span class='beyond20-roll-die-result beyond20-roll-detail-normal'>${rolledJson.data.rolls[0].result.total - rolledJson.data.rolls[0].result.constant}</span></div></div></div></span></span></div></div>`;
     } else {
-        renderedRoll.html = `<div class="beyond20-message"><div class="beyond20-header"><span class='beyond20-title'>${renderedRoll.title}</span></div><div class='beyond20-roll-result beyond20-roll-cells'><div class="beyond20-roll-cell"><span class='beyond20-tooltip'><span class='beyond20-roll-value beyond20-roll-detail-normal beyond20-roll-total dice-total'>${rolledJson.data.rolls[0].result.total}</span><span class='dice-roll beyond20-tooltip-content'><div class='dice-formula beyond20-roll-formula'>${renderedRoll.attack_rolls[0].formula}</div><div class='beyond20-roll-tooltip'><div class='beyond20-roll-dice'><div class='beyond20-roll-dice-formula'>${renderedRoll.attack_rolls[0].formula}</div><div class='beyond20-roll-dice-rolls'><span class='beyond20-roll-die-result beyond20-roll-detail-normal'>${rolledJson.data.rolls[0].result.total - rolledJson.data.rolls[0].result.constant}</span></div></div></div></span></span></div></div></div>`;
+        renderedRoll.html = `<div class="beyond20-message"><div class="beyond20-header">${avatarHTML}<span class='beyond20-title'>${renderedRoll.title}</span></div><div class='beyond20-roll-result beyond20-roll-cells'><div class="beyond20-roll-cell"><span class='beyond20-tooltip'><span class='beyond20-roll-value beyond20-roll-detail-normal beyond20-roll-total dice-total'>${rolledJson.data.rolls[0].result.total}</span><span class='dice-roll beyond20-tooltip-content'><div class='dice-formula beyond20-roll-formula'>${renderedRoll.attack_rolls[0].formula}</div><div class='beyond20-roll-tooltip'><div class='beyond20-roll-dice'><div class='beyond20-roll-dice-formula'>${renderedRoll.attack_rolls[0].formula}</div><div class='beyond20-roll-dice-rolls'><span class='beyond20-roll-die-result beyond20-roll-detail-normal'>${rolledJson.data.rolls[0].result.total - rolledJson.data.rolls[0].result.constant}</span></div></div></div></span></span></div></div></div>`;
     }
 
     sendBeyond20Event("SendMessage", renderedRoll);
