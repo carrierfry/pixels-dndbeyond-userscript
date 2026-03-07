@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.3
+// @version      1.0.3.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -1594,7 +1594,9 @@ function getGameId() {
                 gameId = window.location;
             }
         }
-        lastGameId = gameId.href.split("/")[4];
+        if (document.querySelector(".ddbc-tooltip").firstChild.href !== undefined) {
+            lastGameId = gameId.href.split("/")[4];
+        }
     }
     return lastGameId;
 }
