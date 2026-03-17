@@ -1572,7 +1572,9 @@ function getGameId() {
                 gameId = window.location;
             }
         }
-        lastGameId = gameId.href.split("/")[4];
+        if (document.querySelector(".ddbc-tooltip").firstChild.href !== undefined) {
+            lastGameId = gameId.href.split("/")[4];
+        }
     }
     return lastGameId;
 }
