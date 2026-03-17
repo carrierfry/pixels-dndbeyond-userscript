@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.3.1
+// @version      1.0.3.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -1510,13 +1510,13 @@ function addPixelsLogoButton() {
     if (!doneOnlyOnceStuff) {
         let button = document.createElement("li");
         button.className = "mm-nav-item";
-        if (isMobileView || isTabletView || isMap || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+        if (isMobileView || isTabletView || isMap || (isEncounterBuilder && !document.querySelector("ul[class*='_menuNav']").checkVisibility())) {
             button.className = "nav-list__item nav-list__item--connect-to-pixels";
         }
 
         // create a link
         let link = document.createElement("a");
-        if (isMobileView || isTabletView || isMap || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+        if (isMobileView || isTabletView || isMap || (isEncounterBuilder && !document.querySelector("ul[class*='_menuNav']").checkVisibility())) {
             link.className = "nav-list__item__label";
         }
         // prevent the link from navigating
@@ -1535,8 +1535,8 @@ function addPixelsLogoButton() {
             // find the last mm-nav-item and insert after it
             let lastNavItem = document.querySelector("#mega-menu-target > header > div > div > nav > ul").children;
             link.className = document.querySelector("#mega-menu-target > header > div > div > nav > ul").lastChild.firstChild.className;;
-            if (isMobileView || isTabletView || isMap || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
-                lastNavItem = document.querySelectorAll(".nav-list__item");
+            if (isMobileView || isTabletView || isMap || (isEncounterBuilder && !document.querySelector("ul[class*='_menuNav']").checkVisibility())) {
+                lastNavItem = document.querySelectorAll("ul[class*='_menuNav'] li");
                 link.className = "";
             }
             lastNavItem = lastNavItem[lastNavItem.length - 1];
@@ -2337,7 +2337,7 @@ function addPixelsInfoBox() {
     // add style to the info box (it should be on the left side of the page and be closed by default)
     // it should expand to the right when opened and be roughly 300px wide
 
-    if (isMobileView || isTabletView || isMap || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+    if (isMobileView || isTabletView || isMap || (isEncounterBuilder && !document.querySelector("ul[class*='_menuNav']").checkVisibility())) {
         GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: calc(50% - 25%); width: 50%; min-width: 250px; height: 300px; background-color: rgba(0,0,0,0.90); z-index: 9999`);
     } else {
         GM_addStyle(`.pixels-info-box { position: fixed; top: 50px; left: 0%; width: 320px; height: 300px; background-color: rgba(0,0,0,0.90); z-index: 9999`);
@@ -2407,7 +2407,7 @@ function addPixelsInfoBox() {
     document.querySelector("body").appendChild(button);
 
     // add style to the button
-    if (isMobileView || isTabletView || isMap || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+    if (isMobileView || isTabletView || isMap || (isEncounterBuilder && !document.querySelector("ul[class*='_menuNav']").checkVisibility())) {
         // make button in top middle
         GM_addStyle(`.pixels-info-box__button { position: fixed; top: 6px; left: calc(50% - 16px); width: 32px; height: 32px; border: 0; background-color: transparent; z-index: 9999`);
     } else {
@@ -2528,7 +2528,7 @@ function addDiceOverviewBox() {
 
     // add style to the info box (it should be in the middle of the page and be closed by default)
 
-    if (isMobileView || isTabletView || isMap || (isEncounterBuilder && document.querySelector(".menu-button").checkVisibility())) {
+    if (isMobileView || isTabletView || isMap || (isEncounterBuilder && !document.querySelector("ul[class*='_menuNav']").checkVisibility())) {
         GM_addStyle(`.dice-overview-box { position: fixed; line-height: 1; top: 50%; left: 50%; width: 95%; height: 95%; background-color: rgba(0,0,0,0.95); z-index: 9999; transform: translate(-50%, -50%); }`);
     } else {
         GM_addStyle(`.dice-overview-box { position: fixed; line-height: 1; top: 50%; left: 50%; width: 700px; height: 700px; background-color: rgba(0,0,0,0.95); z-index: 9999; transform: translate(-50%, -50%); }`);
