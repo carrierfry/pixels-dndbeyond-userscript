@@ -752,8 +752,14 @@ function checkForMissingPixelButtons() {
 }
 
 function checkForContextMenu() {
-    let contextMenus = document.querySelectorAll(".MuiPopover-paper");
+    let contextMenus;
     let contextMenu = null;
+    if (isEncounterBuilder) {
+        contextMenus = document.querySelectorAll(".MuiPopover-paper");
+    } else {
+        contextMenus = document.querySelectorAll("div[class*='_menu'][data-width-locked='1']");
+    }
+    
     contextMenus.forEach((element) => {
         if (element.innerHTML.includes("Roll With:") || element.innerHTML.includes("Roll As:")) {
             contextMenu = element;
@@ -763,7 +769,11 @@ function checkForContextMenu() {
     if (contextMenu !== null) {
         let diceToolbar = document.querySelector(".dice-toolbar__dropdown-selected");
         if (diceToolbar === null) {
-            addRollWithPixelButton(contextMenu);
+            if (isEncounterBuilder) {
+                addRollWithPixelButtonLegacy(contextMenu);
+            } else {
+                addRollWithPixelButton(contextMenu);
+            }
             contextMenuShown = true;
         }
     } else {
@@ -800,7 +810,12 @@ function checkForTodo() {
 
 function checkForHealthChange() {
     if (!isEncounterBuilder && !isMap) {
-        let element = document.querySelector("[aria-label^='Current hit points']").nextSibling;
+        let element;
+        if (document.querySelector("[aria-label^='Current hit points']") === null) {
+            element = document.querySelector(".ct-status-summary-mobile__hp-current");
+        } else {
+            element = document.querySelector("[aria-label^='Current hit points']").nextSibling;
+        }
         if (element === null) {
             element = document.querySelector(".ct-status-summary-mobile__hp-current");
         }
@@ -838,6 +853,80 @@ function addRollWithPixelButton(contextMenu) {
     if (!contextMenuShown) {
         let button = document.createElement("button");
         button.id = "roll-with-pixels-button";
+        button.className = "_9OLh5G_rollButton";
+        button.setAttribute("tabindex", "0");
+        button.setAttribute("type", "button");
+        button.innerText = "Roll with Pixels";
+
+        button.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            console.log("Roll with Pixels clicked");
+
+            let currentTarget = e.currentTarget;
+
+            cancelCurrentRoll();
+
+            contextMenu.parentElement.remove();
+            let { adv, dis, crit, target, scope } = determineRollType(currentTarget);
+
+
+            let modifier = getModifierFromButton(lastRightClickedButton);
+            let dieType = getDieTypeFromButton(lastRightClickedButton);
+            let amount = getAmountFromButton(lastRightClickedButton);
+            let rollType = getRollTypeFromButton(lastRightClickedButton);
+            let rollName = getRollNameFromButton(lastRightClickedButton);
+            let damageType = getDamageTypeFromButton(lastRightClickedButton);
+
+            // Here we already know if we want to roll to our selve or not from the context menu
+            // if (isEncounterBuilder) {
+            //     nextSelfRoll = true;
+            //     target = getUserId();
+            //     scope = "userId";
+            // }
+
+            currentlyExpectedRoll = {
+                "modifier": modifier,
+                "dieType": dieType,
+                "amount": amount,
+                "origAmount": amount,
+                "advantage": adv,
+                "disadvantage": dis,
+                "critical": crit,
+                "rollType": rollType,
+                "rollName": rollName,
+                "target": target,
+                "scope": scope,
+                "damageType": damageType
+            };
+
+            nextAdvantageRoll = false;
+            nextDisadvantageRoll = false;
+            nextCriticalRoll = false;
+            nextEveryoneRoll = false;
+            nextSelfRoll = false;
+            nextDMRoll = false;
+
+            if (window.pixels !== undefined && pixels.length > 0) {
+                for (let i = 0; i < pixels.length; i++) {
+                    if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
+                        lightUpPixel(pixels[i], "waitingForRoll");
+                    }
+                }
+            }
+
+            document.querySelector("#character-tools-target").click();
+        };
+
+        contextMenu.appendChild(button);
+    }
+}
+
+function addRollWithPixelButtonLegacy(contextMenu) {
+    if (!contextMenuShown) {
+        let button = document.createElement("button");
+        button.id = "roll-with-pixels-button";
         button.className = "MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-fullWidth css-1kol59t";
         button.setAttribute("tabindex", "0");
         button.setAttribute("type", "button");
@@ -854,7 +943,7 @@ function addRollWithPixelButton(contextMenu) {
             cancelCurrentRoll();
 
             contextMenu.remove();
-            let { adv, dis, crit, target, scope } = determineRollType(currentTarget);
+            let { adv, dis, crit, target, scope } = determineRollTypeLegacy(currentTarget);
 
 
             let modifier = getModifierFromButton(lastRightClickedButton);
@@ -963,22 +1052,24 @@ function listenForMouseOverOfNavItems() {
             element.addEventListener('mouseleave', handleMouseLeave);
         });
 
-        let optionsHeader = Array.from(document.querySelector("[class^='styles_buttons']").children);
-        optionsHeader.forEach((element) => {
-            element.removeEventListener('mouseenter', handleMouseEnter);
-            element.removeEventListener('mouseleave', handleMouseLeave);
+        if (document.querySelector("[class^='styles_buttons']") !== null) {
+            let optionsHeader = Array.from(document.querySelector("[class^='styles_buttons']").children);
+            optionsHeader.forEach((element) => {
+                element.removeEventListener('mouseenter', handleMouseEnter);
+                element.removeEventListener('mouseleave', handleMouseLeave);
 
-            element.addEventListener('mouseenter', handleMouseEnter);
-            element.addEventListener('mouseleave', handleMouseLeave);
-        });
+                element.addEventListener('mouseenter', handleMouseEnter);
+                element.addEventListener('mouseleave', handleMouseLeave);
+            });
+        }
     }
 }
 
 function listenForQuickNavMenu() {
     if (isMobileView || isTabletView) {
-        let quickNav = document.querySelectorAll(".ct-quick-nav__menu");
+        let quickNav = document.querySelector("[class^='Dialog_dialog__']").checkVisibility();
         let swiperMenu = document.querySelectorAll(".ct-component-carousel__placeholders--changing");
-        if (quickNav.length > 0 || swiperMenu.length > 0) {
+        if (quickNav || swiperMenu.length > 0) {
             if (!pixelModeMobileTracker) {
                 // console.log("Quick nav menu opened");
                 handleMouseEnter();
@@ -1090,12 +1181,22 @@ function handleMouseLeave(e) {
 
                     if ((!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") || (dieType === "d20" && isRollFlat(elClone))) {
                         elClone.parentNode.replaceChild(element, elClone);
-                        element.click();
-                        element.parentNode.replaceChild(elClone, element);
+                        // element.click();
+                        setTimeout(() => {
+                            element.click();
+                        }, 200);
+                        setTimeout(() => {
+                            element.parentNode.replaceChild(elClone, element);
+                        }, 400);
                         return;
                     }
 
-                    let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
+                    let adv, dis, crit, target, scope;
+                    if (isEncounterBuilder) {
+                        ({ adv, dis, crit, target, scope } = determineRollTypeLegacy(e.currentTarget));
+                    } else {
+                        ({ adv, dis, crit, target, scope } = determineRollType(e.currentTarget));
+                    }
                     if (isEncounterBuilder) {
                         nextSelfRoll = true;
                         target = getUserId();
@@ -2082,7 +2183,8 @@ function addPixelModeButton() {
     } else if (isTabletView) {
         document.querySelector(".ct-character-header-tablet__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-tablet__group--short-rest"));
     } else if (isMobileView) {
-        document.querySelector(".ct-character-header-mobile__group--gap").appendChild(div);
+        // document.querySelector("div[class*='styles_campaignButtonContainer'").appendChild(div);
+        document.querySelector("div[class*='styles_campaignButtonContainer'").insertBefore(div, document.querySelector("div[class*='Notification'"));
     } else {
         document.querySelector(".ct-character-header-desktop__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-desktop__group--short-rest"));
     }
@@ -3201,6 +3303,77 @@ function determineRollType(rollButton) {
             if (isEncounterBuilder && target === 0) {
                 list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.firstChild;
             } else {
+                // list = rollButton.parentElement.querySelector("ul").children[3].firstChild; // ul
+                list = rollButton.parentElement.querySelectorAll("ul")[1]; // ul
+            }
+        } else {
+            list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.firstChild;
+        }
+        if (list !== null) {
+            let children = list.children;
+            //children.forEach((element) => {
+            for (let i = 0; i < children.length; i++) {
+                let element = children[i];
+                if (element.firstChild !== undefined && element.querySelector("[class*='_check'") !== null) {
+                    if (element.firstChild.innerText.includes("Adv")) {
+                        adv = true;
+                        setRollType("advantage");
+                    } else if (element.firstChild.innerText.includes("Dis")) {
+                        dis = true;
+                        setRollType("disadvantage");
+                    } else if (element.firstChild.innerText.includes("Crit")) {
+                        crit = true;
+                        setRollType("critical");
+                    } else {
+                        setRollType("normal");
+                    }
+                }
+            };
+        }
+
+
+        // list = rollButton.parentElement.querySelector("ul").children[1].firstChild; // ul
+        list = rollButton.parentElement.querySelectorAll("ul")[0];
+        if (list !== null) {
+            let children = list.children;
+            //children.forEach((element) => {
+            for (let i = 0; i < children.length; i++) {
+                let element = children[i];
+                if (element.firstChild !== undefined && element.querySelector("[class*='_check'") !== null) {
+                    if (element.firstChild.innerText.includes("Every")) {
+                        target = getGameId();
+                        scope = "gameId";
+                        setRollTarget("everyoneButton");
+                    } else if (element.firstChild.innerText.includes("Self")) {
+                        target = getUserId();
+                        scope = "userId";
+                        setRollTarget("selfButton");
+                    } else if (element.firstChild.innerText.includes("Master")) {
+                        target = characterData.data.dmId;
+                        scope = "userId";
+                        setRollTarget("dmButton");
+                    }
+                }
+            };
+        }
+    }
+    return { adv, dis, crit, target, scope };
+}
+
+function determineRollTypeLegacy(rollButton) {
+    let adv = false;
+    let dis = false;
+    let crit = false;
+    let target = getGameId();
+    let scope = "gameId";
+
+    if (currentlySwapped || !pixelMode) {
+
+        let list = undefined;
+        if (target !== getCharacterId()) {
+            if (isEncounterBuilder && target === 0) {
+                list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.firstChild;
+            } else {
                 list = rollButton.parentElement.querySelector("ul").children[3].firstChild; // ul
             }
         } else {
@@ -3624,7 +3797,7 @@ function checkIfDieTypeIsConnected(dieType) {
 }
 
 function checkIfDiceButtonCanBeSwappedAgain(currentButton, newButton) {
-    let element = document.querySelector(".MuiPaper-root > div");
+    let element = document.querySelectorAll("div[class*='_menu'][data-width-locked='1']");
     if (element !== null) {
         lastRightClickedButton = currentButton;
         currentlySwapped = true;
