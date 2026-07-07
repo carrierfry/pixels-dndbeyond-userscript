@@ -15,18 +15,32 @@ npx playwright install chromium   # only if no Playwright browser is present yet
 
 The tests need a logged-in DnD Beyond session (anonymous visitors get a
 stripped-down sheet without the Short Rest header, so the extension never
-initializes). Provide one as a cookie dump:
+initializes). Provide one as a cookie dump in `test/cookies.json` (gitignored).
+A throwaway account with a test character is recommended — the roll tests send
+real rolls to that account's game log.
 
-1. Log into dndbeyond.com in your normal browser (a throwaway account with a
-   test character is recommended).
-2. Export the cookies for `dndbeyond.com` (e.g. with a cookie-editor extension,
-   "Export as JSON").
-3. Save them to `test/cookies.json` (gitignored).
+**Easiest way (captures everything, including HttpOnly cookies):**
 
-Accepted formats: a plain JSON array of cookies, or an object with a `cookies`
-array (Playwright `storageState` format). Cookie-editor style entries
-(`sameSite: "no_restriction"`, `expirationDate`, etc.) are normalized
-automatically.
+1. Log into dndbeyond.com and open your character sheet.
+2. Open DevTools → Network tab, reload the page.
+3. Right-click the first request (the document request to `/characters/...`)
+   → Copy → **Copy as cURL**.
+4. Paste the whole thing into `test/cookies.json` as-is.
+
+**Alternative (console snippet):** paste this into the DevTools console on any
+dndbeyond.com page and save the copied output to `test/cookies.json`:
+
+```js
+copy(document.cookie); console.log("copied", document.cookie.split(";").length, "cookies to clipboard");
+```
+
+Note this only captures cookies that are visible to JavaScript — if the login
+session cookie is HttpOnly, the tests will report `logged-in session FAIL` and
+you'll need the cURL method above instead.
+
+Accepted formats: a DevTools "Copy as cURL" dump, a raw `Cookie:` header line,
+a bare `name=value; name2=value2` string, a plain JSON array of cookies
+(cookie-editor "Export as JSON"), or a Playwright `storageState` object.
 
 Then tell the tests which character sheet to use:
 

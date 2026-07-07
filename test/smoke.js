@@ -24,7 +24,25 @@ function loadCookies() {
     if (!fs.existsSync(COOKIES_PATH)) {
         return null;
     }
-    let raw = JSON.parse(fs.readFileSync(COOKIES_PATH, "utf8"));
+    const text = fs.readFileSync(COOKIES_PATH, "utf8");
+    let raw;
+    try {
+        raw = JSON.parse(text);
+    } catch {
+        // Not JSON: accept a raw Cookie header or a DevTools "Copy as cURL" dump,
+        // both of which include HttpOnly cookies that console JS can't read
+        const curlMatch = text.match(/-H\s+['"]?cookie:\s*([^'"\n]+)['"]?/i);
+        const headerMatch = text.match(/^\s*cookie:\s*(.+)$/im);
+        const header = curlMatch?.[1] || headerMatch?.[1] || (text.includes("=") && !text.includes("\n--") ? text.trim() : null);
+        if (!header) {
+            console.error(`${COOKIES_PATH} is neither JSON nor a Cookie header / cURL dump.`);
+            process.exit(2);
+        }
+        raw = header.split(/;\s*/).filter(Boolean).map((pair) => {
+            const i = pair.indexOf("=");
+            return { name: pair.slice(0, i), value: pair.slice(i + 1), domain: ".dndbeyond.com" };
+        });
+    }
     if (!Array.isArray(raw) && Array.isArray(raw.cookies)) {
         raw = raw.cookies;
     }
