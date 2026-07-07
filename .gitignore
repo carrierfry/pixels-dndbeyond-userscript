@@ -1,3 +1,8 @@
 tmp/*
 chrome_extension/*.zip
 chrome_extension_test/*
+test/node_modules/
+test/cookies.json
+test/artifacts/
+test/.profile/
+test/package-lock.json

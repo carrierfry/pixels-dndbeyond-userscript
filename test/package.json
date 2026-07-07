@@ -1,0 +1,11 @@
+{
+    "name": "pixels-dndbeyond-tests",
+    "private": true,
+    "description": "Browser smoke tests for the Pixels DnDBeyond chrome extension",
+    "scripts": {
+        "smoke": "node smoke.js"
+    },
+    "dependencies": {
+        "playwright": "^1.61.1"
+    }
+}
