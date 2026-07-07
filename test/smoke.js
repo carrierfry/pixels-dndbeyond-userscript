@@ -32,8 +32,9 @@ function loadCookies() {
         // Not JSON: accept a raw Cookie header or a DevTools "Copy as cURL" dump,
         // both of which include HttpOnly cookies that console JS can't read
         const curlMatch = text.match(/-H\s+['"]?cookie:\s*([^'"\n]+)['"]?/i);
+        const curlCookieFlag = text.match(/(?:-b|--cookie)\s+(['"])([\s\S]*?)\1/);
         const headerMatch = text.match(/^\s*cookie:\s*(.+)$/im);
-        const header = curlMatch?.[1] || headerMatch?.[1] || (text.includes("=") && !text.includes("\n--") ? text.trim() : null);
+        const header = curlMatch?.[1] || curlCookieFlag?.[2] || headerMatch?.[1] || (text.includes("=") && !text.includes("\n--") ? text.trim() : null);
         if (!header) {
             console.error(`${COOKIES_PATH} is neither JSON nor a Cookie header / cURL dump.`);
             process.exit(2);
@@ -76,7 +77,8 @@ function loadCookies() {
 async function dumpArtifacts(page, label) {
     fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
     try {
-        await page.screenshot({ path: path.join(ARTIFACTS_DIR, `${label}.png`), fullPage: true });
+        // viewport-only: full-page screenshots of the sheet OOM the tab on small machines
+        await page.screenshot({ path: path.join(ARTIFACTS_DIR, `${label}.png`) });
         fs.writeFileSync(path.join(ARTIFACTS_DIR, `${label}.html`), await page.content());
         console.log(`   artifacts written to test/artifacts/${label}.{png,html}`);
     } catch (e) {
@@ -114,9 +116,19 @@ async function getSentRollMessages(page) {
 
     const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
         headless: !HEADED,
+        // full Chromium, not the default headless shell — extensions only load in the former
+        channel: "chromium",
         args: [
             `--disable-extensions-except=${EXTENSION_DIR}`,
             `--load-extension=${EXTENSION_DIR}`,
+            // the character sheet is heavy; without these the renderer can get
+            // OOM-killed on small machines / containers
+            "--disable-dev-shm-usage",
+            "--renderer-process-limit=2",
+            "--js-flags=--max-old-space-size=384",
+            "--disable-gpu",
+            "--disable-background-networking",
+            "--disable-sync",
         ],
         viewport: { width: 1600, height: 900 },
     });
@@ -141,6 +153,19 @@ async function getSentRollMessages(page) {
     });
 
     await ctx.addCookies(cookies);
+
+    // Keep memory down (the sheet + ad/analytics scripts can OOM small machines):
+    // block images/media/fonts and third-party trackers. dndbeyond.com scripts,
+    // styles and API calls still load normally.
+    const blockedTypes = new Set(["image", "media", "font"]);
+    const blockedHosts = /doubleclick|googlesyndication|googletagmanager|google-analytics|datadoghq|hotjar|ketchcdn|amazon-adsystem|adnxs|scorecardresearch|quantserve|nitropay|cookielaw/i;
+    await ctx.route("**/*", (route) => {
+        const req = route.request();
+        if (blockedTypes.has(req.resourceType()) || blockedHosts.test(new URL(req.url()).hostname)) {
+            return route.abort();
+        }
+        return route.continue();
+    });
 
     const page = await ctx.newPage();
     page.on("dialog", async (d) => {
@@ -217,38 +242,62 @@ async function getSentRollMessages(page) {
 
             // ---- 6. roll appears in game log ----
             try {
-                await page.click(".ct-character-header-desktop__group--game-log, [class*='game-log']", { timeout: 5000 });
+                await page.click("[aria-roledescription='Game Log'] [class*='campaignButton'], [aria-roledescription='Game Log'], [class*='GameLogButton']", { timeout: 5000 });
+                await page.waitForSelector("[class*='GameLogEntries']", { timeout: 15000 });
                 await page.waitForTimeout(2000);
-                const inLog = await page.evaluate(() => document.body.innerText.includes("18"));
-                report("roll visible in game log", inLog ? "PASS" : "WARN", inLog ? "" : "could not confirm");
+                const inLog = await page.evaluate(() => {
+                    const log = document.querySelector("[class*='GameLogEntries']");
+                    return log !== null && log.innerText.includes("18");
+                });
+                report("roll visible in game log", inLog ? "PASS" : "FAIL", inLog ? "" : "roll not rendered into the game log");
             } catch {
-                report("roll visible in game log", "WARN", "could not open game log");
+                report("roll visible in game log", "WARN", "could not open game log — toggle selector may have changed");
             }
 
             // ---- 7. pixel mode flow: click a check button, then roll ----
+            // Without a connected die the click handler falls back to a virtual roll,
+            // so register a fake connected d20 first. No Bluetooth involved: only
+            // dieType/status are read and blink() is called on it.
             try {
+                await page.evaluate(() => {
+                    window.pixels = window.pixels || [];
+                    if (window.pixels.length === 0) {
+                        window.pixels.push({
+                            name: "SmokeTestDie",
+                            dieType: "d20",
+                            status: "ready",
+                            rssi: -60,
+                            batteryLevel: 100,
+                            blink: async () => {},
+                            addEventListener: () => {},
+                            removeEventListener: () => {},
+                        });
+                    }
+                });
                 const clicked = await page.evaluate(() => {
-                    // strength check button on the desktop sheet
-                    const abilities = document.querySelectorAll(".ddbc-ability-summary button, .ct-ability-summary button, [class*='ability-summary'] button");
-                    if (abilities.length === 0) return false;
-                    abilities[0].click();
+                    // pixel mode swaps every dice button (.integrated-dice__container) for
+                    // a clone with the pixel click handler — click the first d20 one
+                    const buttons = document.querySelectorAll(".integrated-dice__container");
+                    if (buttons.length === 0) return false;
+                    buttons[0].click();
                     return true;
                 });
                 if (!clicked) {
-                    report("pixel mode check roll", "WARN", "no ability check button found — selectors may have changed");
+                    report("pixel mode check roll", "FAIL", "no .integrated-dice__container buttons on sheet — selector broken?");
                 } else {
                     await page.waitForTimeout(1500);
                     const expected = await page.evaluate(() => (typeof currentlyExpectedRoll !== "undefined" ? currentlyExpectedRoll : null));
                     if (!expected || Object.keys(expected).length === 0) {
-                        report("pixel mode check roll", "WARN", "clicking check button did not arm a pixel roll");
+                        report("pixel mode check roll", "FAIL", "clicking dice button did not arm a pixel roll");
                     } else {
                         const before2 = (await getSentRollMessages(page)).length;
                         await page.evaluate(() => rollDice("d20", 15));
                         await page.waitForTimeout(3000);
                         const rolls2 = (await getSentRollMessages(page)).slice(before2);
                         const fulfilled2 = rolls2.find((m) => m.eventType === "dice/roll/fulfilled");
-                        const ok = fulfilled2 && fulfilled2.data?.rolls?.[0]?.result?.values?.[0] === 15;
-                        report("pixel mode check roll", ok ? "PASS" : "FAIL", ok ? `modifier ${expected.modifier} applied` : "roll not submitted");
+                        const values = fulfilled2?.data?.rolls?.[0]?.result?.values;
+                        const ok = Array.isArray(values) && values.includes(15);
+                        report("pixel mode check roll", ok ? "PASS" : "FAIL", ok ? `armed '${expected.rollName}' (modifier ${expected.modifier}), roll submitted` : "roll not submitted");
                     }
                 }
             } catch (e) {
