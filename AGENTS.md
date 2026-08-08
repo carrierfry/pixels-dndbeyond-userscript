@@ -246,6 +246,10 @@ npx playwright install chromium
   `test/README.md` for accepted formats. Use a throwaway account: the test
   sends real rolls to that account's game log.
 - `DDB_CHARACTER_URL` env var pointing at a character on that account.
+- (optional) `test/beyond20/` — unpacked Beyond20 Chrome extension. When
+  present, the smoke test loads it alongside the Pixels extension and runs
+  two extra checks (Beyond20 detection + roll forwarding). Download from
+  <https://github.com/kakaroto/Beyond20/releases/latest>. Gitignored.
 
 ### Run
 ```bash
@@ -264,6 +268,8 @@ HEADED=1 DDB_CHARACTER_URL=https://www.dndbeyond.com/characters/<id> npm run smo
    socket and the roll shows up in the game log UI.
 6. Pixel Mode flow: click a check/save button, `rollDice()` with the
    matching die type, verify the roll is submitted with the modifier.
+7. (optional) Beyond20 detected + `rollDice()` dispatches a
+   `Beyond20_SendMessage` event — only when `test/beyond20/` is present.
 
 On failure, screenshots + an HTML dump land in `test/artifacts/` (gitignored)
 so you can diff D&D Beyond's current DOM against the selectors the extension

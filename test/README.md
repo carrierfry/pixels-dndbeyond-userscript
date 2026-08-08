@@ -48,6 +48,36 @@ Then tell the tests which character sheet to use:
 export DDB_CHARACTER_URL="https://www.dndbeyond.com/characters/<your-test-character-id>"
 ```
 
+## Optional: load the Beyond20 extension
+
+The content script has a Beyond20 bridge (`sendRollToBeyond20`) that forwards
+rolls to VTTs when the Beyond20 extension is present. To exercise it in the
+smoke test, download the Beyond20 Chrome build into `test/beyond20/`:
+
+```bash
+cd test
+mkdir beyond20 && cd beyond20
+curl -fsSL -o beyond20-chrome.zip "https://github.com/kakaroto/Beyond20/releases/latest/download/beyond_20-2.20.1-chrome.zip"
+# unzip with whatever's available (unzip, python3, etc.)
+unzip beyond20-chrome.zip && rm beyond20-chrome.zip
+```
+
+The exact version doesn't matter much; the download URL follows the pattern
+`beyond_20-<version>-chrome.zip` (check
+<https://github.com/kakaroto/Beyond20/releases/latest> for the current tag).
+The directory just needs to contain Beyond20's `manifest.json` at its root.
+
+When `test/beyond20/` exists, the smoke test automatically loads it alongside
+the Pixels extension and runs two extra checks:
+
+- **Beyond20 extension detected** — verifies `beyond20Installed` is `true`.
+- **roll forwarded to Beyond20** — verifies a `Beyond20_SendMessage` event
+  fires after `rollDice()`.
+
+Without the directory, those checks are reported as `SKIP` and the rest of the
+suite runs unchanged. `test/beyond20/` is gitignored — it's a vendored
+third-party extension, not part of this repo.
+
 ## Running
 
 ```bash

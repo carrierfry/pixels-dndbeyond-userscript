@@ -7,6 +7,8 @@ const path = require("path");
 const { chromium } = require("playwright");
 
 const EXTENSION_DIR = path.resolve(__dirname, "..", "chrome_extension");
+const BEYOND20_DIR = path.resolve(__dirname, "beyond20");
+const LOAD_BEYOND20 = fs.existsSync(BEYOND20_DIR);
 const ARTIFACTS_DIR = path.join(__dirname, "artifacts");
 const PROFILE_DIR = path.join(__dirname, ".profile");
 const COOKIES_PATH = process.env.DDB_COOKIES || path.join(__dirname, "cookies.json");
@@ -114,13 +116,20 @@ async function getSentRollMessages(page) {
         process.exit(2);
     }
 
+    const extensionsToLoad = LOAD_BEYOND20 ? `${EXTENSION_DIR},${BEYOND20_DIR}` : EXTENSION_DIR;
+    if (LOAD_BEYOND20) {
+        console.log("Loading Beyond20 alongside Pixels extension");
+    } else {
+        console.log("Beyond20 not found in test/beyond20/ — bridge checks will be skipped");
+    }
+
     const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
         headless: !HEADED,
         // full Chromium, not the default headless shell — extensions only load in the former
         channel: "chromium",
         args: [
-            `--disable-extensions-except=${EXTENSION_DIR}`,
-            `--load-extension=${EXTENSION_DIR}`,
+            `--disable-extensions-except=${extensionsToLoad}`,
+            `--load-extension=${extensionsToLoad}`,
             // the character sheet is heavy; without these the renderer can get
             // OOM-killed on small machines / containers
             "--disable-dev-shm-usage",
@@ -142,7 +151,10 @@ async function getSentRollMessages(page) {
                 configurable: true,
             });
         }
-        window.__pixelsTest = { sent: [], intercepted: false };
+        window.__pixelsTest = { sent: [], intercepted: false, beyond20Sent: [] };
+        document.addEventListener("Beyond20_SendMessage", (e) => {
+            window.__pixelsTest.beyond20Sent.push(e.detail);
+        });
         const origSend = WebSocket.prototype.send;
         WebSocket.prototype.send = function (data) {
             if (typeof data === "string") {
@@ -222,6 +234,14 @@ async function getSentRollMessages(page) {
         );
         report("Connect to Pixels nav entry", connectNav ? "PASS" : "FAIL");
 
+        // ---- 4b. Beyond20 detected (optional, only when bundled) ----
+        if (LOAD_BEYOND20) {
+            const b20 = await page.evaluate(() => typeof beyond20Installed !== "undefined" && beyond20Installed);
+            report("Beyond20 extension detected", b20 ? "PASS" : "FAIL");
+        } else {
+            report("Beyond20 extension detected", "SKIP", "test/beyond20/ not present (see test/README.md)");
+        }
+
         if (pixelModeBtn) {
             // ---- 5. plain rollDice() submits a custom roll ----
             const before = (await getSentRollMessages(page)).length;
@@ -238,6 +258,18 @@ async function getSentRollMessages(page) {
                 console.log("   messages:", JSON.stringify(rolls).slice(0, 500));
             } else {
                 report("rollDice('d20', 18) submits roll", "FAIL", "nothing sent over socket (socket not ready?)");
+            }
+
+            // ---- 5b. roll forwarded to Beyond20 (optional) ----
+            if (LOAD_BEYOND20) {
+                const b20Sent = await page.evaluate(() => window.__pixelsTest.beyond20Sent);
+                if (b20Sent.length > 0) {
+                    report("roll forwarded to Beyond20", "PASS", `${b20Sent.length} SendMessage event(s) dispatched`);
+                } else {
+                    report("roll forwarded to Beyond20", "FAIL", "no Beyond20_SendMessage event fired");
+                }
+            } else {
+                report("roll forwarded to Beyond20", "SKIP", "Beyond20 not loaded");
             }
 
             // ---- 6. roll appears in game log ----

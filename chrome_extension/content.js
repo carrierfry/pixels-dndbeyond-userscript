@@ -455,6 +455,38 @@ let currentPixelRatio = ((window.outerWidth - 10) / window.innerWidth) * 100;
 
 let enableCustomModifiers = false;
 
+const pixelSwappedHandlers = new WeakMap();
+let pixelModeCaptureInstalled = false;
+function installPixelModeCapture() {
+    if (pixelModeCaptureInstalled) return;
+    pixelModeCaptureInstalled = true;
+    const swappedDiceTarget = (target) => {
+        if (!target || typeof target.closest !== "function") return null;
+        const el = target.closest(".integrated-dice__container");
+        return (el && pixelSwappedHandlers.has(el)) ? el : null;
+    };
+    const onCapture = (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        const el = swappedDiceTarget(e.target);
+        if (!el) return;
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        pixelSwappedHandlers.get(el)(e);
+    };
+    window.addEventListener("pointerdown", onCapture, true);
+    window.addEventListener("mousedown", onCapture, true);
+    window.addEventListener("click", onCapture, true);
+    window.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        const el = swappedDiceTarget(e.target);
+        if (!el) return;
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        pixelSwappedHandlers.get(el)(e);
+    }, true);
+}
+installPixelModeCapture();
+
 let deathSaveButtonVisible = false;
 let deathSaveButtonOrig = undefined;
 
@@ -1193,9 +1225,9 @@ function handleMouseLeave(e) {
 
                     let adv, dis, crit, target, scope;
                     if (isEncounterBuilder) {
-                        ({ adv, dis, crit, target, scope } = determineRollTypeLegacy(e.currentTarget));
+                        ({ adv, dis, crit, target, scope } = determineRollTypeLegacy(elClone));
                     } else {
-                        ({ adv, dis, crit, target, scope } = determineRollType(e.currentTarget));
+                        ({ adv, dis, crit, target, scope } = determineRollType(elClone));
                     }
                     if (isEncounterBuilder) {
                         nextSelfRoll = true;
@@ -1256,6 +1288,7 @@ function handleMouseLeave(e) {
 
                 elClone.onclick = onClickHandler;
                 elClone.addEventListener("contextmenu", onClickHandler);
+                pixelSwappedHandlers.set(elClone, onClickHandler);
             });
         }
     } else {
@@ -1304,7 +1337,7 @@ function applyClickHandlerToButton(element) {
             return;
         }
 
-        let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
+        let { adv, dis, crit, target, scope } = determineRollType(elClone);
         if (isEncounterBuilder) {
             nextSelfRoll = true;
             target = getUserId();
@@ -1364,6 +1397,7 @@ function applyClickHandlerToButton(element) {
 
     elClone.onclick = onClickHandler;
     elClone.addEventListener("contextmenu", onClickHandler);
+    pixelSwappedHandlers.set(elClone, onClickHandler);
 }
 
 function completelySwapButtons() {
@@ -2287,7 +2321,7 @@ function addPixelModeButton() {
                         return;
                     }
 
-                    let { adv, dis, crit, target, scope } = determineRollType(e.currentTarget);
+                    let { adv, dis, crit, target, scope } = determineRollType(elClone);
                     if (isEncounterBuilder) {
                         nextSelfRoll = true;
                         target = getUserId();
@@ -2345,6 +2379,7 @@ function addPixelModeButton() {
                 };
                 elClone.onclick = onClickHandler;
                 elClone.addEventListener("contextmenu", onClickHandler);
+                pixelSwappedHandlers.set(elClone, onClickHandler);
             });
         } else {
             div.firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");

@@ -5,4 +5,6 @@ test/node_modules/
 test/cookies.json
 test/artifacts/
 test/.profile/
+test/.profile-beyond20/
+test/beyond20/
 test/package-lock.json
