@@ -260,7 +260,32 @@ async function getSentRollMessages(page) {
                 report("rollDice('d20', 18) submits roll", "FAIL", "nothing sent over socket (socket not ready?)");
             }
 
-            // ---- 5b. roll forwarded to Beyond20 (optional) ----
+            // ---- 5b. game log speech bubble appears ----
+            try {
+                const bubble = await page.evaluate(() => {
+                    const b = document.querySelector("[data-pixels-bubble='true']");
+                    if (!b) return null;
+                    const wrapper = b.querySelector("div[style*='opacity']");
+                    const inner = wrapper ? wrapper.querySelector("div") : null;
+                    const content = b.querySelector("span[style*='white-space:nowrap']");
+                    const icon = b.querySelector("div[style*='border-radius:25px']");
+                    return {
+                        visible: inner ? inner.getBoundingClientRect().width > 0 : false,
+                        text: content ? content.innerText.replace(/\n/g, " ").trim() : "",
+                        iconBg: icon ? window.getComputedStyle(icon).backgroundColor : "",
+                        hasDivider: content ? !!content.querySelector("span[style*='border-left']") : false,
+                    };
+                });
+                if (bubble && bubble.visible) {
+                    report("game log speech bubble", "PASS", `"${bubble.text.slice(0, 60)}" icon=${bubble.iconBg} divider=${bubble.hasDivider}`);
+                } else {
+                    report("game log speech bubble", "FAIL", bubble ? "bubble not visible" : "no [data-pixels-bubble] element");
+                }
+            } catch (e) {
+                report("game log speech bubble", "WARN", e.message.slice(0, 120));
+            }
+
+            // ---- 5c. roll forwarded to Beyond20 (optional) ----
             if (LOAD_BEYOND20) {
                 const b20Sent = await page.evaluate(() => window.__pixelsTest.beyond20Sent);
                 if (b20Sent.length > 0) {
@@ -330,6 +355,31 @@ async function getSentRollMessages(page) {
                         const values = fulfilled2?.data?.rolls?.[0]?.result?.values;
                         const ok = Array.isArray(values) && values.includes(15);
                         report("pixel mode check roll", ok ? "PASS" : "FAIL", ok ? `armed '${expected.rollName}' (modifier ${expected.modifier}), roll submitted` : "roll not submitted");
+
+                        // ---- 6b. bubble positioned above Game Log button ----
+                        try {
+                            const pos = await page.evaluate(() => {
+                                const b = document.querySelector("[data-pixels-bubble='true']");
+                                const gl = document.querySelector("[aria-roledescription='Game Log']") || document.querySelector("[class*='soloGameLogButton']");
+                                if (!b || !gl) return null;
+                                const wrapper = b.querySelector("div[style*='opacity']");
+                                const inner = wrapper ? wrapper.querySelector("div") : null;
+                                if (!inner) return null;
+                                const br = inner.getBoundingClientRect();
+                                const gr = gl.getBoundingClientRect();
+                                return {
+                                    horizontallyCentered: Math.abs((br.x + br.width / 2) - (gr.x + gr.width / 2)) < 50,
+                                    aboveGameLog: br.bottom <= gr.y + 10,
+                                };
+                            });
+                            if (pos && pos.horizontallyCentered && pos.aboveGameLog) {
+                                report("bubble positioned above game log", "PASS");
+                            } else {
+                                report("bubble positioned above game log", "FAIL", pos ? `centered=${pos.horizontallyCentered} above=${pos.aboveGameLog}` : "bubble or game log button not found");
+                            }
+                        } catch (e) {
+                            report("bubble positioned above game log", "WARN", e.message.slice(0, 120));
+                        }
                     }
                 }
             } catch (e) {
