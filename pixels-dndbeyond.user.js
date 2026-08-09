@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.4.3
+// @version      1.0.4.5
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -494,9 +494,21 @@ function installPixelModeCapture() {
             e.stopImmediatePropagation();
         }
     }, true);
-    // Claim the click and invoke the Pixel handler
+    // Claim the click only when a matching Pixel die is connected (or it's a contextmenu);
+    // otherwise let DDB's own handler roll the virtual dice with the trusted click.
     window.addEventListener("click", (e) => {
         if (e.button !== undefined && e.button !== 0) return;
+        const el = swappedDiceTarget(e.target);
+        if (!el) return;
+        const dieType = getDieTypeFromButton(el);
+        if (e.type === "contextmenu" || (checkIfDieTypeIsConnected(dieType) && !(dieType === "d20" && isRollFlat(el)))) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            pixelSwappedHandlers.get(el)(e);
+        }
+    }, true);
+    window.addEventListener("contextmenu", (e) => {
+        if (e.button !== undefined && e.button !== 2 && !e.ctrlKey) return;
         const el = swappedDiceTarget(e.target);
         if (!el) return;
         e.stopImmediatePropagation();
@@ -513,6 +525,87 @@ function installPixelModeCapture() {
     }, true);
 }
 installPixelModeCapture();
+
+// Shared handler invoked by the capture-phase listeners for swapped dice buttons.
+// Always arms a Pixel roll (currentlyExpectedRoll) and lights up matching dice.
+// The decision of whether to claim the event (Pixel) vs let it bubble (virtual dice)
+// is made by the capture listener in installPixelModeCapture, not here.
+function pixelModeClickHandler(e, button) {
+    console.log("Dice clicked");
+
+    cancelCurrentRoll();
+
+    let modifier = getModifierFromButton(button);
+    let dieType = getDieTypeFromButton(button);
+    let amount = getAmountFromButton(button);
+    let rollType = getRollTypeFromButton(button);
+    let rollName = getRollNameFromButton(button);
+    let damageType = getDamageTypeFromButton(button);
+
+    if (e.type === "contextmenu") {
+        lastRightClickedButton = button;
+        return;
+    }
+
+    let adv, dis, crit, target, scope;
+    if (isEncounterBuilder) {
+        ({ adv, dis, crit, target, scope } = determineRollTypeLegacy(button));
+        nextSelfRoll = true;
+        target = getUserId();
+        scope = "userId";
+    } else {
+        ({ adv, dis, crit, target, scope } = determineRollType(button));
+    }
+
+    currentlyExpectedRoll = {
+        "modifier": modifier,
+        "dieType": dieType,
+        "amount": amount,
+        "origAmount": amount,
+        "advantage": adv,
+        "disadvantage": dis,
+        "critical": crit,
+        "rollType": rollType,
+        "rollName": rollName,
+        "target": target,
+        "scope": scope,
+        "damageType": damageType
+    };
+
+    document.querySelector("#selfButton").style.backgroundColor = "darkgray";
+    document.querySelector("#everyoneButton").style.backgroundColor = "white";
+    document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+    document.querySelector("#advButton").style.backgroundColor = "darkgray";
+    document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
+    document.querySelector("#critButton").style.backgroundColor = "darkgray";
+
+    if (nextAdvantageRoll && !dis && !crit) {
+        currentlyExpectedRoll.advantage = true;
+    }
+    if (nextDisadvantageRoll && !adv && !crit) {
+        currentlyExpectedRoll.disadvantage = true;
+    }
+    if (nextCriticalRoll && !adv && !dis) {
+        currentlyExpectedRoll.critical = true;
+    }
+    if (nextEveryoneRoll) {
+        setRollTarget("everyoneButton");
+    }
+    if (nextSelfRoll) {
+        setRollTarget("selfButton");
+    }
+    if (nextDMRoll) {
+        setRollTarget("dmButton");
+    }
+
+    if (window.pixels !== undefined && pixels.length > 0) {
+        for (let i = 0; i < pixels.length; i++) {
+            if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
+                lightUpPixel(pixels[i], "waitingForRoll");
+            }
+        }
+    }
+}
 
 let deathSaveButtonVisible = false;
 let deathSaveButtonOrig = undefined;
@@ -1186,22 +1279,6 @@ function handleMouseEnter(e) {
         e.preventDefault();
         e.stopPropagation();
     }
-    // console.log("Nav item hovered");
-
-    if (pixelMode) {
-        document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
-            element.parentNode.replaceChild(originalDiceClick[index], element);
-        });
-
-        originalDiceClick = [];
-
-        if (isTouchDevice() && !isMobileView && !isTabletView && !isEncounterBuilder) {
-            setTimeout(() => {
-                handleMouseLeave(e);
-                alreadyHandledMouseLeave = true;
-            }, 100);
-        }
-    }
 }
 
 function handleMouseLeave(e) {
@@ -1209,233 +1286,12 @@ function handleMouseLeave(e) {
         e.preventDefault();
         e.stopPropagation();
     }
-
-    if (!alreadyHandledMouseLeave) {
-        if (pixelMode) {
-
-            originalDiceClick = [];
-
-            document.querySelectorAll(".integrated-dice__container").forEach((element) => {
-                originalDiceClick.push(element);
-
-                let elClone = element.cloneNode(true);
-
-                element.parentNode.replaceChild(elClone, element);
-                function onClickHandler(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    console.log("Dice clicked");
-
-                    cancelCurrentRoll();
-
-                    let modifier = getModifierFromButton(elClone);
-                    let dieType = getDieTypeFromButton(elClone);
-                    let amount = getAmountFromButton(elClone);
-                    let rollType = getRollTypeFromButton(elClone);
-                    let rollName = getRollNameFromButton(elClone);
-                    let damageType = getDamageTypeFromButton(elClone);
-
-                    if (e.type === "contextmenu") {
-                        elClone.parentNode.replaceChild(element, elClone);
-                        lastRightClickedButton = element;
-                        const event = new MouseEvent('contextmenu', {
-                            bubbles: true
-                        });
-                        element.dispatchEvent(event);
-                        swapButtonInterval = setInterval(() => {
-                            checkIfDiceButtonCanBeSwappedAgain(element, elClone);
-                        }, 50);
-                        return;
-                    }
-
-                    if ((!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") || (dieType === "d20" && isRollFlat(elClone))) {
-                        elClone.parentNode.replaceChild(element, elClone);
-                        // element.click();
-                        setTimeout(() => {
-                            element.click();
-                        }, 200);
-                        setTimeout(() => {
-                            element.parentNode.replaceChild(elClone, element);
-                        }, 400);
-                        return;
-                    }
-
-                    let adv, dis, crit, target, scope;
-                    if (isEncounterBuilder) {
-                        ({ adv, dis, crit, target, scope } = determineRollTypeLegacy(elClone));
-                    } else {
-                        ({ adv, dis, crit, target, scope } = determineRollType(elClone));
-                    }
-                    if (isEncounterBuilder) {
-                        nextSelfRoll = true;
-                        target = getUserId();
-                        scope = "userId";
-                    }
-
-                    currentlyExpectedRoll = {
-                        "modifier": modifier,
-                        "dieType": dieType,
-                        "amount": amount,
-                        "origAmount": amount,
-                        "advantage": adv,
-                        "disadvantage": dis,
-                        "critical": crit,
-                        "rollType": rollType,
-                        "rollName": rollName,
-                        "target": target,
-                        "scope": scope,
-                        "damageType": damageType
-                    };
-
-                    document.querySelector("#selfButton").style.backgroundColor = "darkgray";
-                    document.querySelector("#everyoneButton").style.backgroundColor = "white";
-                    document.querySelector("#dmButton").style.backgroundColor = "darkgray";
-                    document.querySelector("#advButton").style.backgroundColor = "darkgray";
-                    document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
-                    document.querySelector("#critButton").style.backgroundColor = "darkgray";
-
-                    if (nextAdvantageRoll && !dis && !crit) {
-                        currentlyExpectedRoll.advantage = true;
-                    }
-                    if (nextDisadvantageRoll && !adv && !crit) {
-                        currentlyExpectedRoll.disadvantage = true;
-                    }
-                    if (nextCriticalRoll && !adv && !dis) {
-                        currentlyExpectedRoll.critical = true;
-                    }
-                    if (nextEveryoneRoll) {
-                        setRollTarget("everyoneButton");
-                    }
-                    if (nextSelfRoll) {
-                        setRollTarget("selfButton");
-                    }
-                    if (nextDMRoll) {
-                        setRollTarget("dmButton");
-                    }
-
-
-                    if (window.pixels !== undefined && pixels.length > 0) {
-                        for (let i = 0; i < pixels.length; i++) {
-                            if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
-                                lightUpPixel(pixels[i], "waitingForRoll");
-                            }
-                        }
-                    }
-                };
-
-                elClone.onclick = onClickHandler;
-                elClone.addEventListener("contextmenu", onClickHandler);
-                pixelSwappedHandlers.set(elClone, onClickHandler);
-            });
-        }
-    } else {
-        alreadyHandledMouseLeave = false;
-    }
 }
 
 function applyClickHandlerToButton(element) {
+    if (pixelSwappedHandlers.has(element)) return;
     originalDiceClick.push(element);
-
-    let elClone = element.cloneNode(true);
-
-    element.parentNode.replaceChild(elClone, element);
-    function onClickHandler(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        console.log("Dice clicked");
-
-        cancelCurrentRoll();
-
-        let modifier = getModifierFromButton(elClone);
-        let dieType = getDieTypeFromButton(elClone);
-        let amount = getAmountFromButton(elClone);
-        let rollType = getRollTypeFromButton(elClone);
-        let rollName = getRollNameFromButton(elClone);
-        let damageType = getDamageTypeFromButton(elClone);
-
-        if (e.type === "contextmenu") {
-            elClone.parentNode.replaceChild(element, elClone);
-            lastRightClickedButton = element;
-            const event = new MouseEvent('contextmenu', {
-                bubbles: true
-            });
-            element.dispatchEvent(event);
-            swapButtonInterval = setInterval(() => {
-                checkIfDiceButtonCanBeSwappedAgain(element, elClone);
-            }, 50);
-            return;
-        }
-
-        if ((!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") || (dieType === "d20" && isRollFlat(elClone))) {
-            elClone.parentNode.replaceChild(element, elClone);
-            element.click();
-            element.parentNode.replaceChild(elClone, element);
-            return;
-        }
-
-        let { adv, dis, crit, target, scope } = determineRollType(elClone);
-        if (isEncounterBuilder) {
-            nextSelfRoll = true;
-            target = getUserId();
-            scope = "userId";
-        }
-
-        currentlyExpectedRoll = {
-            "modifier": modifier,
-            "dieType": dieType,
-            "amount": amount,
-            "origAmount": amount,
-            "advantage": adv,
-            "disadvantage": dis,
-            "critical": crit,
-            "rollType": rollType,
-            "rollName": rollName,
-            "target": target,
-            "scope": scope,
-            "damageType": damageType
-        };
-
-        document.querySelector("#selfButton").style.backgroundColor = "darkgray";
-        document.querySelector("#everyoneButton").style.backgroundColor = "white";
-        document.querySelector("#dmButton").style.backgroundColor = "darkgray";
-        document.querySelector("#advButton").style.backgroundColor = "darkgray";
-        document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
-        document.querySelector("#critButton").style.backgroundColor = "darkgray";
-
-        if (nextAdvantageRoll && !dis && !crit) {
-            currentlyExpectedRoll.advantage = true;
-        }
-        if (nextDisadvantageRoll && !adv && !crit) {
-            currentlyExpectedRoll.disadvantage = true;
-        }
-        if (nextCriticalRoll && !adv && !dis) {
-            currentlyExpectedRoll.critical = true;
-        }
-        if (nextEveryoneRoll) {
-            setRollTarget("everyoneButton");
-        }
-        if (nextSelfRoll) {
-            setRollTarget("selfButton");
-        }
-        if (nextDMRoll) {
-            setRollTarget("dmButton");
-        }
-
-
-        if (window.pixels !== undefined && pixels.length > 0) {
-            for (let i = 0; i < pixels.length; i++) {
-                if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
-                    lightUpPixel(pixels[i], "waitingForRoll");
-                }
-            }
-        }
-    };
-
-    elClone.onclick = onClickHandler;
-    elClone.addEventListener("contextmenu", onClickHandler);
-    pixelSwappedHandlers.set(elClone, onClickHandler);
+    pixelSwappedHandlers.set(element, (e) => pixelModeClickHandler(e, element));
 }
 
 function completelySwapButtons() {
@@ -2001,9 +1857,8 @@ function rollDice(realDieType, value) {
                 } else {
                     document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
                 }
-                //document.querySelector(".ct-character-header-desktop__group--pixels").firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
-                document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
-                    element.parentNode.replaceChild(originalDiceClick[index], element);
+                originalDiceClick.forEach((element) => {
+                    pixelSwappedHandlers.delete(element);
                 });
                 originalDiceClick = [];
                 pixelModeOnlyOnce = false;
@@ -2317,107 +2172,8 @@ function addPixelModeButton() {
                 div.classList.add("ct-character-header-desktop__group--pixels-active");
             }
             div.firstChild.classList.add("ct-character-header-desktop__group--pixels-active");
-            document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
-                originalDiceClick.push(element);
-
-                let elClone = element.cloneNode(true);
-
-                element.parentNode.replaceChild(elClone, element);
-
-                function onClickHandler(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    console.log("Dice clicked");
-
-                    cancelCurrentRoll();
-
-                    let modifier = getModifierFromButton(elClone);
-                    let dieType = getDieTypeFromButton(elClone);
-                    let amount = getAmountFromButton(elClone);
-                    let rollType = getRollTypeFromButton(elClone);
-                    let rollName = getRollNameFromButton(elClone);
-                    let damageType = getDamageTypeFromButton(elClone);
-
-                    if (e.type === "contextmenu") {
-                        elClone.parentNode.replaceChild(element, elClone);
-                        lastRightClickedButton = element;
-                        const event = new MouseEvent('contextmenu', {
-                            bubbles: true
-                        });
-                        element.dispatchEvent(event);
-                        swapButtonInterval = setInterval(() => {
-                            checkIfDiceButtonCanBeSwappedAgain(element, elClone);
-                        }, 50);
-                        return;
-                    }
-
-                    if ((!checkIfDieTypeIsConnected(dieType) && virtualDice && e.type !== "contextmenu") || (dieType === "d20" && isRollFlat(elClone))) {
-                        elClone.parentNode.replaceChild(element, elClone);
-                        element.click();
-                        element.parentNode.replaceChild(elClone, element);
-                        return;
-                    }
-
-                    let { adv, dis, crit, target, scope } = determineRollType(elClone);
-                    if (isEncounterBuilder) {
-                        nextSelfRoll = true;
-                        target = getUserId();
-                        scope = "userId";
-                    }
-
-                    currentlyExpectedRoll = {
-                        "modifier": modifier,
-                        "dieType": dieType,
-                        "amount": amount,
-                        "origAmount": amount,
-                        "advantage": adv,
-                        "disadvantage": dis,
-                        "critical": crit,
-                        "rollType": rollType,
-                        "rollName": rollName,
-                        "target": target,
-                        "scope": scope,
-                        "damageType": damageType
-                    };
-
-                    document.querySelector("#selfButton").style.backgroundColor = "darkgray";
-                    document.querySelector("#everyoneButton").style.backgroundColor = "white";
-                    document.querySelector("#dmButton").style.backgroundColor = "darkgray";
-                    document.querySelector("#advButton").style.backgroundColor = "darkgray";
-                    document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
-                    document.querySelector("#critButton").style.backgroundColor = "darkgray";
-
-                    if (nextAdvantageRoll && !dis && !crit) {
-                        currentlyExpectedRoll.advantage = true;
-                    }
-                    if (nextDisadvantageRoll && !adv && !crit) {
-                        currentlyExpectedRoll.disadvantage = true;
-                    }
-                    if (nextCriticalRoll && !adv && !dis) {
-                        currentlyExpectedRoll.critical = true;
-                    }
-                    if (nextEveryoneRoll) {
-                        setRollTarget("everyoneButton");
-                    }
-                    if (nextSelfRoll) {
-                        setRollTarget("selfButton");
-                    }
-                    if (nextDMRoll) {
-                        setRollTarget("dmButton");
-                    }
-
-                    if (window.pixels !== undefined && pixels.length > 0) {
-                        for (let i = 0; i < pixels.length; i++) {
-                            if (pixels[i].dieType === dieType || (pixels[i].dieType === "d6pipped" && dieType === "d6")) {
-                                lightUpPixel(pixels[i], "waitingForRoll");
-                            }
-                        }
-                    }
-                };
-                elClone.onclick = onClickHandler;
-                elClone.addEventListener("contextmenu", onClickHandler);
-                pixelSwappedHandlers.set(elClone, onClickHandler);
+            document.querySelectorAll(".integrated-dice__container").forEach((element) => {
+                applyClickHandlerToButton(element);
             });
         } else {
             div.firstChild.classList.remove("ct-character-header-desktop__group--pixels-active");
@@ -2425,8 +2181,8 @@ function addPixelModeButton() {
                 div.classList.remove("ct-character-header-desktop__group--pixels-active");
             }
 
-            document.querySelectorAll(".integrated-dice__container").forEach((element, index) => {
-                element.parentNode.replaceChild(originalDiceClick[index], element);
+            originalDiceClick.forEach((element) => {
+                pixelSwappedHandlers.delete(element);
             });
 
             originalDiceClick = [];
