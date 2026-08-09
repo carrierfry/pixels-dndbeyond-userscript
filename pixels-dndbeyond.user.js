@@ -487,17 +487,22 @@ function installPixelModeCapture() {
         const el = target.closest(".integrated-dice__container");
         return (el && pixelSwappedHandlers.has(el)) ? el : null;
     };
-    const onCapture = (e) => {
+    // Prevent Beyond20's pointerdown hijack from swallowing the click event
+    window.addEventListener("pointerdown", (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        if (swappedDiceTarget(e.target)) {
+            e.stopImmediatePropagation();
+        }
+    }, true);
+    // Claim the click and invoke the Pixel handler
+    window.addEventListener("click", (e) => {
         if (e.button !== undefined && e.button !== 0) return;
         const el = swappedDiceTarget(e.target);
         if (!el) return;
         e.stopImmediatePropagation();
         e.preventDefault();
         pixelSwappedHandlers.get(el)(e);
-    };
-    window.addEventListener("pointerdown", onCapture, true);
-    window.addEventListener("mousedown", onCapture, true);
-    window.addEventListener("click", onCapture, true);
+    }, true);
     window.addEventListener("keydown", (e) => {
         if (e.key !== "Enter" && e.key !== " ") return;
         const el = swappedDiceTarget(e.target);
