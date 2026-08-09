@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.4.2
+// @version      1.0.4.3
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -648,7 +648,7 @@ function main() {
             if (!doneOnlyOnceStuff) {
                 setInterval(checkForOpenGameLog, 500);
                 setInterval(checkIfCharacterSheetLoaded, 1000);
-                setInterval(checkForMissingPixelButtons, 1000);
+                setInterval(checkForMissingPixelButtons, 300);
                 setInterval(checkForContextMenu, 300);
                 setInterval(checkForTodo, 300);
                 setInterval(listenForRightClicks, 300);
@@ -802,6 +802,17 @@ function checkForMissingPixelButtons() {
             addPixelsLogoButton();
             addPixelModeButton();
         }
+    }
+
+    // Re-swap dice buttons that appeared after Pixel Mode was enabled
+    // (e.g. navigating to the Spells tab renders new .integrated-dice__container
+    // buttons which are not in originalDiceClick and thus not swapped yet).
+    if (pixelMode) {
+        document.querySelectorAll(".integrated-dice__container").forEach((element) => {
+            if (!pixelSwappedHandlers.has(element)) {
+                applyClickHandlerToButton(element);
+            }
+        });
     }
 }
 
