@@ -3102,7 +3102,7 @@ function determineRollType(rollButton) {
     let target = getGameId();
     let scope = "gameId";
 
-    if (currentlySwapped || !pixelMode) {
+    if (contextMenuShown || !pixelMode) {
 
         let list = undefined;
         if (target !== getCharacterId()) {
@@ -3115,12 +3115,12 @@ function determineRollType(rollButton) {
         } else {
             list = rollButton.previousSibling.previousSibling.firstChild.nextSibling.firstChild;
         }
-        if (list !== null) {
+        if (list !== null && list !== undefined) {
             let children = list.children;
             //children.forEach((element) => {
             for (let i = 0; i < children.length; i++) {
                 let element = children[i];
-                if (element.firstChild !== undefined && element.querySelector("[class*='_check'") !== null) {
+                if (element.firstChild !== undefined && element.querySelector("[class*='_check']") !== null) {
                     if (element.firstChild.innerText.includes("Adv")) {
                         adv = true;
                         setRollType("advantage");
@@ -3140,12 +3140,12 @@ function determineRollType(rollButton) {
 
         // list = rollButton.parentElement.querySelector("ul").children[1].firstChild; // ul
         list = rollButton.parentElement.querySelectorAll("ul")[0];
-        if (list !== null) {
+        if (list !== null && list !== undefined) {
             let children = list.children;
             //children.forEach((element) => {
             for (let i = 0; i < children.length; i++) {
                 let element = children[i];
-                if (element.firstChild !== undefined && element.querySelector("[class*='_check'") !== null) {
+                if (element.firstChild !== undefined && element.querySelector("[class*='_check']") !== null) {
                     if (element.firstChild.innerText.includes("Every")) {
                         target = getGameId();
                         scope = "gameId";
@@ -3173,7 +3173,7 @@ function determineRollTypeLegacy(rollButton) {
     let target = getGameId();
     let scope = "gameId";
 
-    if (currentlySwapped || !pixelMode) {
+    if (contextMenuShown || !pixelMode) {
 
         let list = undefined;
         if (target !== getCharacterId()) {
