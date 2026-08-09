@@ -490,14 +490,6 @@ function installPixelModeCapture() {
             pixelSwappedHandlers.get(el)(e);
         }
     }, true);
-    window.addEventListener("contextmenu", (e) => {
-        if (e.button !== undefined && e.button !== 2 && !e.ctrlKey) return;
-        const el = swappedDiceTarget(e.target);
-        if (!el) return;
-        e.stopImmediatePropagation();
-        e.preventDefault();
-        pixelSwappedHandlers.get(el)(e);
-    }, true);
     window.addEventListener("keydown", (e) => {
         if (e.key !== "Enter" && e.key !== " ") return;
         const el = swappedDiceTarget(e.target);

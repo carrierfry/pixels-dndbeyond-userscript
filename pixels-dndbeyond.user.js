@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.5.0
+// @version      1.0.5.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -511,14 +511,6 @@ function installPixelModeCapture() {
             e.preventDefault();
             pixelSwappedHandlers.get(el)(e);
         }
-    }, true);
-    window.addEventListener("contextmenu", (e) => {
-        if (e.button !== undefined && e.button !== 2 && !e.ctrlKey) return;
-        const el = swappedDiceTarget(e.target);
-        if (!el) return;
-        e.stopImmediatePropagation();
-        e.preventDefault();
-        pixelSwappedHandlers.get(el)(e);
     }, true);
     window.addEventListener("keydown", (e) => {
         if (e.key !== "Enter" && e.key !== " ") return;
