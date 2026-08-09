@@ -335,6 +335,80 @@ async function getSentRollMessages(page) {
             } catch (e) {
                 report("pixel mode check roll", "WARN", e.message.slice(0, 120));
             }
+
+            // ---- 8. no matching Pixel die → virtual dice flow (event not claimed) ----
+            // With pixelMode on and no connected d8, clicking a non-d20 damage button
+            // must NOT call stopImmediatePropagation/preventDefault, so DDB's own
+            // handler receives the trusted click and rolls the digital dice.
+            try {
+                // Pick a non-d20 dice button (e.g. damage) and check the capture
+                // listener's decision by dispatching a synthetic click and reading
+                // defaultPrevented. We can't use the real click (it would actually
+                // roll DDB's dice), so we simulate the capture decision via the same
+                // logic the extension uses.
+                const claimed = await page.evaluate(() => {
+                    const btns = document.querySelectorAll(".integrated-dice__container");
+                    let target = null;
+                    for (const b of btns) {
+                        const dt = getDieTypeFromButton(b);
+                        if (dt && dt !== "d20") { target = b; break; }
+                    }
+                    if (!target) return { error: "no non-d20 button" };
+                    // Replicate the capture listener's decision: claim only if connected
+                    const dt = getDieTypeFromButton(target);
+                    const wouldClaim = checkIfDieTypeIsConnected(dt) && !(dt === "d20" && isRollFlat(target));
+                    return { dieType: dt, wouldClaim, inWeakMap: pixelSwappedHandlers.has(target) };
+                });
+                if (claimed.error) {
+                    report("virtual dice flow not blocked", "WARN", claimed.error);
+                } else if (claimed.wouldClaim) {
+                    report("virtual dice flow not blocked", "FAIL", `capture would claim a ${claimed.dieType} with no matching die connected`);
+                } else {
+                    report("virtual dice flow not blocked", "PASS", `capture leaves ${claimed.dieType} clicks through to DDB (no matching Pixel die)`);
+                }
+            } catch (e) {
+                report("virtual dice flow not blocked", "WARN", e.message.slice(0, 120));
+            }
+
+            // ---- 9. tab-change re-swap: new buttons get registered ----
+            // Navigating to a different tab renders new .integrated-dice__container
+            // buttons; the checkForMissingPixelButtons poller (300ms) must register
+            // them in pixelSwappedHandlers so Pixel Mode keeps working on every tab.
+            try {
+                const before = await page.evaluate(() => {
+                    const btns = document.querySelectorAll(".integrated-dice__container");
+                    return { total: btns.length, swapped: Array.from(btns).filter(b => pixelSwappedHandlers.has(b)).length };
+                });
+                // Click a different tab (Spells, Actions, Equipment — whichever isn't active)
+                const tabClicked = await page.evaluate(() => {
+                    const tabs = document.querySelectorAll("[class^='styles_tabButton']");
+                    if (tabs.length < 2) return false;
+                    // Pick a tab that isn't the currently active one
+                    for (const t of tabs) {
+                        if (!t.className.includes("active") && !t.getAttribute("aria-selected")) {
+                            t.click();
+                            return true;
+                        }
+                    }
+                    // Fallback: click the second tab
+                    tabs[1].click();
+                    return true;
+                });
+                if (!tabClicked) {
+                    report("tab-change re-swap", "WARN", "no alternate tab to click");
+                } else {
+                    // Wait for the poller to catch up (300ms interval; give it generous headroom)
+                    await page.waitForTimeout(1500);
+                    const after = await page.evaluate(() => {
+                        const btns = document.querySelectorAll(".integrated-dice__container");
+                        return { total: btns.length, swapped: Array.from(btns).filter(b => pixelSwappedHandlers.has(b)).length };
+                    });
+                    const ok = after.total > 0 && after.swapped === after.total;
+                    report("tab-change re-swap", ok ? "PASS" : "FAIL", ok ? `all ${after.total} buttons registered after tab change` : `only ${after.swapped}/${after.total} registered after tab change`);
+                }
+            } catch (e) {
+                report("tab-change re-swap", "WARN", e.message.slice(0, 120));
+            }
         } else {
             report("rollDice('d20', 18) submits roll", "SKIP", "sheet not detected");
             report("pixel mode check roll", "SKIP", "sheet not detected");

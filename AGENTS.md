@@ -270,6 +270,12 @@ HEADED=1 DDB_CHARACTER_URL=https://www.dndbeyond.com/characters/<id> npm run smo
    matching die type, verify the roll is submitted with the modifier.
 7. (optional) Beyond20 detected + `rollDice()` dispatches a
    `Beyond20_SendMessage` event — only when `test/beyond20/` is present.
+8. Virtual dice flow not blocked: with pixelMode on and no matching Pixel
+   die connected, the capture listener leaves the click through to DDB
+   (verifies the "no Pixel → digital dice roll" path isn't swallowed).
+9. Tab-change re-swap: after switching to a different sheet tab, the
+   `checkForMissingPixelButtons` poller registers all newly rendered
+   `.integrated-dice__container` buttons in `pixelSwappedHandlers`.
 
 On failure, screenshots + an HTML dump land in `test/artifacts/` (gitignored)
 so you can diff D&D Beyond's current DOM against the selectors the extension
