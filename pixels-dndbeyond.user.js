@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.5.1
+// @version      1.0.5.2
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -1813,6 +1813,8 @@ function rollDice(realDieType, value) {
 
             createToast(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], modifier, rolledJson.data.rolls[0].diceNotationStr);
 
+            createGameLogBubble(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], rolledJson);
+
             if (beyond20Installed && !beyond20OldMethod) {
                 sendRollToBeyond20(rolledJson);
             }
@@ -3366,6 +3368,144 @@ function createToast(dieType, total, value, modifier = 0, diceNotationStr = unde
     }, 8000);
 }
 
+function getThemeAccentColor() {
+    let gameLogBtn = document.querySelector("[aria-roledescription='Game Log']")
+        || document.querySelector("[class*='soloGameLogButton']")
+        || document.querySelector("[class*='campaignButtonGroup']");
+    if (gameLogBtn) {
+        let borderColor = window.getComputedStyle(gameLogBtn).borderColor;
+        if (borderColor && borderColor !== "rgb(0, 0, 0)" && borderColor !== "rgba(0, 0, 0, 0)") {
+            return borderColor;
+        }
+    }
+    return "rgb(197, 49, 49)";
+}
+
+function getRollTypeColor(rollType) {
+    let lookup = gamelogClassLookup[rollType] || gamelogClassLookup["roll"];
+    let el = document.querySelector("[class*='" + lookup + "']");
+    if (el) {
+        let color = window.getComputedStyle(el).color;
+        if (color && color !== "rgb(0, 0, 0)") {
+            return color;
+        }
+    }
+    let defaults = {
+        "save": "rgb(108, 191, 91)",
+        "check": "rgb(181, 93, 255)",
+        "roll": "rgb(245, 166, 35)",
+        "to hit": "rgb(108, 191, 91)",
+        "damage": "rgb(223, 123, 123)",
+        "recharge": "rgb(108, 191, 91)"
+    };
+    return defaults[rollType] || defaults["roll"];
+}
+
+function getGameLogBubblePosition() {
+    let gameLogBtn = document.querySelector("[aria-roledescription='Game Log']")
+        || document.querySelector("[class*='soloGameLogButton']")
+        || document.querySelector("[class*='campaignButtonGroup']");
+    if (!gameLogBtn) return null;
+    let r = gameLogBtn.getBoundingClientRect();
+    return { left: r.left + r.width / 2, bottom: r.bottom, btnWidth: r.width };
+}
+
+function createGameLogBubble(dieType, total, value, rolledJson) {
+    let pos = getGameLogBubblePosition();
+    if (!pos) return;
+
+    let accentColor = getThemeAccentColor();
+    let rollType = currentlyExpectedRoll.rollType || "roll";
+    let rollName = currentlyExpectedRoll.rollName || "roll";
+    let rollTypeColor = getRollTypeColor(rollType);
+    let characterName = getCharacterName();
+    let displayName = characterName ? characterName + " rolled" : "rolled";
+
+    let rollActionText = rollName;
+    if (rollType === "to hit") {
+        rollActionText = "to hit";
+    }
+
+    let svgIcon = svgDiceLookup[dieType] || svgDiceLookup["d20"];
+
+    let root = document.createElement("div");
+    root.setAttribute("data-pixels-bubble", "true");
+    root.style.cssText = "position:absolute; top:0; left:0; width:0; height:0; z-index:999999; pointer-events:none;";
+
+    let carrot = document.createElement("div");
+    carrot.style.cssText = "position:absolute; width:20px; height:10px; display:flex; align-items:center; justify-content:center; border-top:10px solid #fff; border-left:10px solid transparent; border-right:10px solid transparent; z-index:2;";
+
+    let messageRoot = document.createElement("div");
+    messageRoot.style.cssText = "position:absolute; display:flex; flex-direction:column; align-items:center; opacity:0; transition:opacity 0.3s ease;";
+
+    let message = document.createElement("div");
+    message.style.cssText = "display:block;";
+
+    let wrapper = document.createElement("div");
+    wrapper.style.cssText = "display:flex; align-items:center; min-height:55px; padding:8px 10px 8px 8px; box-sizing:border-box; background:#fff; border:1px solid rgb(231,231,231); border-radius:16px; box-shadow:0 0 10px 0 rgba(36,36,36,0.3); overflow:hidden; cursor:pointer; pointer-events:auto;";
+
+    let icon = document.createElement("div");
+    icon.style.cssText = "width:42px; height:42px; min-width:42px; display:flex; align-items:center; justify-content:center; background:" + accentColor + "; border-radius:25px; box-sizing:border-box;";
+
+    let iconDie = document.createElement("span");
+    iconDie.style.cssText = "display:flex; align-items:center; justify-content:center; color:#fff; width:32px; height:32px;";
+    iconDie.innerHTML = svgIcon;
+    let svgEl = iconDie.querySelector("svg");
+    if (svgEl) { svgEl.style.width = "32px"; svgEl.style.height = "32px"; }
+    icon.appendChild(iconDie);
+
+    let content = document.createElement("span");
+    content.style.cssText = "display:flex; align-items:center; margin-left:10px; color:rgb(115,134,148); font-size:12px; font-weight:700; font-family:Roboto,'Helvetica Neue',Helvetica,Arial,sans-serif; white-space:nowrap;";
+
+    content.innerHTML = '<span style="text-transform:uppercase;">' + escapeHtml(displayName) + '&nbsp;</span>'
+        + '<span style="color:' + rollTypeColor + '; text-transform:uppercase;">' + escapeHtml(rollActionText) + '</span>'
+        + '&nbsp;<span style="color:rgb(32,43,51); font-size:24px; font-weight:700; border-left:1px solid rgb(138,155,168); padding-left:10px; margin-left:5px;">' + total + '</span>';
+
+    wrapper.appendChild(icon);
+    wrapper.appendChild(content);
+    message.appendChild(wrapper);
+    messageRoot.appendChild(message);
+    root.appendChild(messageRoot);
+    root.appendChild(carrot);
+    document.body.appendChild(root);
+
+    requestAnimationFrame(() => {
+        let bubbleWidth = messageRoot.offsetWidth;
+        let bubbleHeight = messageRoot.offsetHeight;
+        let btnCenterX = pos.left;
+        let btnTop = pos.bottom - 29;
+        let bubbleLeft = btnCenterX - bubbleWidth / 2;
+        let bubbleBottom = btnTop;
+        let bubbleTop = bubbleBottom - bubbleHeight;
+
+        let margin = 10;
+        let viewportWidth = window.innerWidth;
+        if (bubbleLeft < margin) bubbleLeft = margin;
+        if (bubbleLeft + bubbleWidth > viewportWidth - margin) bubbleLeft = viewportWidth - bubbleWidth - margin;
+
+        messageRoot.style.left = bubbleLeft + "px";
+        messageRoot.style.top = bubbleTop + "px";
+        messageRoot.style.bottom = "auto";
+        messageRoot.style.right = "auto";
+
+        let carrotX = btnCenterX - 10;
+        carrotX = Math.max(bubbleLeft + 10, Math.min(carrotX, bubbleLeft + bubbleWidth - 30));
+        carrot.style.left = carrotX + "px";
+        carrot.style.top = (bubbleBottom - 1) + "px";
+
+        messageRoot.style.opacity = "1";
+    });
+
+    let removeTimer = setTimeout(() => { root.remove(); }, 5000);
+    wrapper.addEventListener("click", () => { clearTimeout(removeTimer); root.remove(); });
+}
+
+function escapeHtml(str) {
+    let div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 function checkForOtherPeoplesRolls() {
     if (socket !== undefined) {
         socket.addEventListener('message', function (event) {
@@ -3517,6 +3657,7 @@ window.rollDice = rollDice;
 window.pwc = pixelsWebConnect;
 window.updateCurrentPixels = updateCurrentPixels;
 window.createToast = createToast;
+window.createGameLogBubble = createGameLogBubble;
 window.currentlyExpectedRoll = currentlyExpectedRoll;
 
 function GM_addStyle(css) {

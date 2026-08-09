@@ -239,6 +239,21 @@ npm install
 npx playwright install chromium
 ```
 
+> **Running node/npm inside WSL.** This checkout lives inside the
+> `Ubuntu-24.04` WSL distro. Node is installed via `nvm` (not on the system
+> PATH by default). From a non-interactive shell (e.g. the agent's
+> `wsl -d Ubuntu-24.04 -- bash -lc "..."`) you must source nvm first:
+>
+> ```bash
+> wsl -d Ubuntu-24.04 -- bash -lc 'source ~/.nvm/nvm.sh && cd /home/fabian/pixels-dndbeyond-userscript/test && npm run smoke'
+> ```
+>
+> Without `source ~/.nvm/nvm.sh`, `node` is not found (`command not found`).
+> `bash -lc` (a login shell) alone is not enough — nvm only auto-loads in
+> truly interactive sessions. Always prefix WSL node/npm commands with the
+> nvm source line. Do not use Windows-side `node.exe` for the tests;
+> Playwright's Chromium launch fails when driven across the WSL boundary.
+
 ### Required inputs
 - `test/cookies.json` (gitignored) — a logged-in D&D Beyond session. The
   easiest robust method is DevTools → Network → "Copy as cURL" on the
@@ -266,8 +281,13 @@ HEADED=1 DDB_CHARACTER_URL=https://www.dndbeyond.com/characters/<id> npm run smo
 4. `Connect to Pixels` nav entry is injected.
 5. `rollDice("d20", 18)` sends init + rolled messages over the game-log
    socket and the roll shows up in the game log UI.
+5b. Game log speech bubble: `rollDice()` also triggers a
+   `[data-pixels-bubble]` toast above the Game Log button (icon, text,
+   divider present).
 6. Pixel Mode flow: click a check/save button, `rollDice()` with the
    matching die type, verify the roll is submitted with the modifier.
+6b. Bubble positioned above the Game Log button (horizontally centered,
+   above the button).
 7. (optional) Beyond20 detected + `rollDice()` dispatches a
    `Beyond20_SendMessage` event — only when `test/beyond20/` is present.
 8. Virtual dice flow not blocked: with pixelMode on and no matching Pixel
