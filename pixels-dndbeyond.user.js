@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.4.5
+// @version      1.0.5.0
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -487,10 +487,15 @@ function installPixelModeCapture() {
         const el = target.closest(".integrated-dice__container");
         return (el && pixelSwappedHandlers.has(el)) ? el : null;
     };
-    // Prevent Beyond20's pointerdown hijack from swallowing the click event
+    // Prevent Beyond20's pointerdown hijack from swallowing the click event,
+    // but only when we're going to claim the click ourselves (Pixel die connected
+    // or contextmenu). Otherwise let DDB's pointerdown flow through untouched.
     window.addEventListener("pointerdown", (e) => {
         if (e.button !== undefined && e.button !== 0) return;
-        if (swappedDiceTarget(e.target)) {
+        const el = swappedDiceTarget(e.target);
+        if (!el) return;
+        const dieType = getDieTypeFromButton(el);
+        if (checkIfDieTypeIsConnected(dieType) && !(dieType === "d20" && isRollFlat(el))) {
             e.stopImmediatePropagation();
         }
     }, true);
