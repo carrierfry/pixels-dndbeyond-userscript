@@ -1,4 +1,4 @@
-// E2E: top bar connect/pixelmode behavior with and without sheet iframe
+// E2E: pixel roll injects into the map game log (queued while closed)
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
@@ -52,8 +52,7 @@ async function shot(page, name) {
     await ctx.addCookies(loadCookies());
 
     const page = await ctx.newPage();
-    let errors = [];
-    page.on("pageerror", (err) => errors.push(String(err).slice(0, 200)));
+    page.on("pageerror", (err) => console.log("[pageerror]", String(err).slice(0, 300)));
     await page.goto("https://www.dndbeyond.com/characters/48300614", { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForTimeout(10000);
     await page.goto(MAP_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -64,29 +63,9 @@ async function shot(page, name) {
         await page.waitForTimeout(20000);
     }
     await page.keyboard.press("Escape");
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(1000);
 
-    // 1. WITHOUT sheet iframe: pixel mode click -> hint appears
-    await page.evaluate(() => document.querySelector("#pixels-map-pixelmode").click());
-    await page.waitForTimeout(800);
-    const hint = await page.evaluate(() => {
-        const el = document.querySelector("[data-pixels-map-popup]");
-        return el ? el.textContent : "(no hint)";
-    });
-    console.log("hint without iframe:", JSON.stringify(hint));
-    await shot(page, "probe-950-hint");
-
-    // 2. WITHOUT iframe: connect click -> should call requestMyPixel locally, no uncaught error
-    await page.waitForTimeout(4500);
-    await page.evaluate(() => document.querySelector("#pixels-map-connect").click());
-    await page.waitForTimeout(2000);
-    const connectLabel = await page.evaluate(() => ({
-        label: document.querySelector("#pixels-map-connect span").textContent,
-        badgeDisplay: document.querySelector("#pixels-map-connect .pixels-map-count").style.display || "(default)",
-    }));
-    console.log("connect button after click (no iframe):", JSON.stringify(connectLabel));
-
-    // 3. open sheet iframe -> status flows, badge stays hidden at 0 dice, label constant
+    // open sheet iframe and roll TWICE while the game log is CLOSED
     await page.evaluate(() => document.querySelector("[data-testid='sidebar-button']")?.click());
     await page.waitForTimeout(2500);
     await page.evaluate(() => document.querySelector("[data-testid='encounter-list-item'] summary")?.click());
@@ -101,31 +80,46 @@ async function shot(page, name) {
     await page.waitForTimeout(15000);
     const frame = page.frames().find((f) => f.url().includes("view=vtt"));
     if (!frame) throw new Error("no vtt frame");
-    await page.waitForTimeout(5000);
-    const withIframe = await page.evaluate(() => ({
-        label: document.querySelector("#pixels-map-connect span").textContent,
-        badgeDisplay: document.querySelector("#pixels-map-connect .pixels-map-count").style.display || "(default)",
-        pixelModeCls: document.querySelector("#pixels-map-pixelmode").className,
-    }));
-    console.log("connect button with iframe open:", JSON.stringify(withIframe));
 
-    // 4. close the sheet -> button resets after poll
-    await page.evaluate(() => {
-        const closeBtn = Array.from(document.querySelectorAll("button")).find((b) => (b.getAttribute("aria-label") || "").toLowerCase().includes("close") && b.getBoundingClientRect().x < 400);
-        if (closeBtn) closeBtn.click();
+    await frame.evaluate(() => rollDice("d20", 14));
+    await page.waitForTimeout(2000);
+    await frame.evaluate(() => rollDice("d20", 9));
+    await page.waitForTimeout(3000);
+
+    const logClosed = await page.evaluate(() => ({
+        hasList: !!document.querySelector("[data-testid='gameLogListItem']"),
+        popup: !!document.querySelector("[data-pixels-map-popup]"),
+    }));
+    console.log("state with log closed (both rolls):", JSON.stringify(logClosed));
+    await shot(page, "probe-960-log-closed");
+
+    // open the game log -> queued entries must appear
+    await page.evaluate(() => document.querySelector("[data-testid='gameLogButton']").click());
+    await page.waitForTimeout(2000);
+    const entries = await page.evaluate(() => {
+        const list = document.querySelector("[data-testid='gameLogListItem']")?.parentElement;
+        if (!list) return { list: false };
+        return {
+            list: true,
+            count: list.children.length,
+            pixelsEntries: Array.from(list.querySelectorAll("[id^='pixels-gamelog-entry-']")).map((e) => e.innerText.replace(/\n/g, " | ")),
+            firstChildText: list.children[0]?.innerText.replace(/\n/g, " | ").slice(0, 80),
+        };
     });
-    await page.waitForTimeout(8000);
-    const afterClose = await page.evaluate(() => ({
-        label: document.querySelector("#pixels-map-connect span").textContent,
-        badgeDisplay: document.querySelector("#pixels-map-connect .pixels-map-count").style.display || "(default)",
-        pixelModeCls: document.querySelector("#pixels-map-pixelmode").className,
-        iframeCount: document.querySelectorAll("iframe[src*='view=vtt']").length,
-    }));
-    console.log("after sheet close:", JSON.stringify(afterClose));
-    await shot(page, "probe-951-after-close");
+    console.log("game log after open:", JSON.stringify(entries, null, 1));
+    await shot(page, "probe-961-log-open");
 
-    const realErrors = errors.filter((e) => !e.includes("Failed to execute 'json'"));
-    console.log("page errors (filtered):", realErrors.length ? realErrors : "none");
+    // roll again while log is OPEN -> appears immediately
+    await frame.evaluate(() => rollDice("d20", 20));
+    await page.waitForTimeout(4000);
+    const entries2 = await page.evaluate(() => {
+        const list = document.querySelector("[data-testid='gameLogListItem']")?.parentElement;
+        return {
+            pixelsEntries: list ? Array.from(list.querySelectorAll("[id^='pixels-gamelog-entry-']")).map((e) => e.innerText.replace(/\n/g, " | ")) : [],
+        };
+    });
+    console.log("after roll with log open:", JSON.stringify(entries2, null, 1));
+    await shot(page, "probe-962-log-live");
 
     await ctx.close();
 })().catch((e) => { console.error("FATAL:", e.message); process.exit(1); });

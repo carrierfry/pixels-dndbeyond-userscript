@@ -676,6 +676,19 @@ if (runInFrame) {
             }
         } else if (event.data.type === "command" && isVttSheetIframe()) {
             handlePixelsCommand(event.data.command);
+        } else if (event.data.type === "gamelog" && window.location.pathname.startsWith("/games/")) {
+            let json;
+            try {
+                json = JSON.parse(event.data.payload);
+            } catch {
+                return;
+            }
+            if (json && json.data && json.data.rollId && !mapGamelogQueue.some((q) => q.data.rollId === json.data.rollId)) {
+                mapGamelogQueue.push(json);
+                if (mapGamelogQueue.length > 50) {
+                    mapGamelogQueue.shift();
+                }
+            }
         } else if (event.data.type === "status" && window.location.pathname.startsWith("/games/")) {
             pixelsLastStatusAt = Date.now();
             updateMapPixelsUI(event.data);
@@ -768,6 +781,97 @@ function showMapHint(text) {
     setTimeout(() => {
         popup.remove();
     }, 4000);
+}
+
+// Pixel rolls made in the sheet iframe arrive here while the maps game log
+// panel may be closed; entries queue up and are injected once it is open
+// (and re-injected if the panel re-renders and drops them).
+let mapGamelogQueue = [];
+
+function checkForOpenMapGameLog() {
+    if (mapGamelogQueue.length === 0) return;
+    const list = getMapGamelogList();
+    if (list === null) return;
+    for (const json of mapGamelogQueue) {
+        if (!document.getElementById("pixels-gamelog-entry-" + json.data.rollId)) {
+            appendMapGamelogEntry(json, list);
+        }
+    }
+}
+
+function getMapGamelogList() {
+    return document.querySelector("[data-testid='gameLogListItem']")?.parentElement
+        || document.querySelector("[class*='messagesContainer'] ol")
+        || null;
+}
+
+function getGameLogMessageCssHash() {
+    const sample = document.querySelector("[class*='GameLogMessage-module__']");
+    if (sample) {
+        const match = sample.className.match(/GameLogMessage-module__([\w-]+)__/);
+        if (match) return match[1];
+    }
+    for (const stylesheet of document.styleSheets) {
+        let rules;
+        try {
+            rules = stylesheet.cssRules;
+        } catch {
+            continue;
+        }
+        for (const rule of rules) {
+            const match = rule.selectorText && rule.selectorText.match(/GameLogMessage-module__([\w-]+)__/);
+            if (match) return match[1];
+        }
+    }
+    return null;
+}
+
+function getRelativeTimeAgo(dateTime) {
+    const minutes = Math.max(0, Math.floor((Date.now() - dateTime) / 60000));
+    if (minutes < 1) return "just now";
+    if (minutes === 1) return "1 minute ago";
+    if (minutes < 60) return minutes + " minutes ago";
+    const hours = Math.floor(minutes / 60);
+    if (hours === 1) return "1 hour ago";
+    if (hours < 24) return hours + " hours ago";
+    const days = Math.floor(hours / 24);
+    return days === 1 ? "1 day ago" : days + " days ago";
+}
+
+function appendMapGamelogEntry(json, list) {
+    const hash = getGameLogMessageCssHash();
+    if (hash === null) return;
+    const roll = json.data.rolls[json.data.rolls.length - 1];
+    const gm = "GameLogMessage-module__" + hash + "__";
+    const st = "styles-module__yLy3IW__";
+    const rollTypeClassLookup = { "check": "check", "save": "save", "roll": "roll", "to hit": "roll", "damage": "damage" };
+    const rollTypeClass = gm + (rollTypeClassLookup[roll.rollType] || "roll");
+    const li = document.createElement("li");
+    li.id = "pixels-gamelog-entry-" + json.data.rollId;
+    li.setAttribute("data-testid", "gameLogListItem");
+    li.className = st + "listItem " + st + "self";
+    li.innerHTML = '<div class="' + gm + 'container ' + gm + 'containerTime"><p class="' + gm + 'name"></p><div class="' + gm + 'rollContainerSelf ' + gm + 'rollContainerTime" tabindex="0"><div class="' + gm + 'rollWrapper"><span class="' + gm + 'actionContainer"><span class="' + gm + 'action" title=""></span>:<span class="' + gm + 'rollType ' + rollTypeClass + '"></span></span><div><p class="' + gm + 'breakdown"></p><p class="' + gm + 'notation"></p></div></div><span class="' + gm + 'rollResult ' + gm + 'rollResultTime"></span></div><p class="' + gm + 'time"></p></div>';
+    li.querySelector("p[class*='__name']").textContent = (json.data.context?.name || "Unknown").toUpperCase();
+    const actionContainer = li.querySelector("span[class*='__actionContainer']");
+    const actionSpan = actionContainer.querySelector("span[class*='__action']");
+    actionSpan.textContent = json.data.action || "custom";
+    const rollTypeSpan = actionContainer.querySelector("span[class*='__rollType']");
+    rollTypeSpan.textContent = roll.rollType || "roll";
+
+    const breakdown = li.querySelector("p[class*='__breakdown']");
+    const rollTakenSpans = roll.result.values.map((v) => '<span class="' + gm + 'rollTaken">' + v + "</span>");
+    if (roll.diceNotation.constant) {
+        rollTakenSpans.push('<span class="' + gm + 'rollTaken">' + roll.diceNotation.constant + "</span>");
+    }
+    breakdown.innerHTML = rollTakenSpans.join(" + ");
+    li.querySelector("p[class*='__notation']").textContent = roll.diceNotationStr;
+    li.querySelector("span[class*='__rollResult']").textContent = roll.result.total;
+    li.querySelector("p[class*='__time']").textContent = getRelativeTimeAgo(json.dateTime);
+    list.prepend(li);
+    const container = document.querySelector("[class*='messagesContainer']");
+    if (container) {
+        container.scrollTop = 0;
+    }
 }
 
 function sendPixelsStatusToParent() {
@@ -887,6 +991,7 @@ function main() {
         if (!addMapPixelsUI()) {
             setTimeout(main, 500);
         }
+        setInterval(checkForOpenMapGameLog, 500);
         return;
     }
 
@@ -2049,6 +2154,14 @@ function rollDice(realDieType, value) {
             createToast(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], modifier, rolledJson.data.rolls[0].diceNotationStr);
 
             createGameLogBubble(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], rolledJson);
+
+            if (isMapIframe) {
+                try {
+                    window.parent.postMessage({ source: "pixels-dndbeyond", type: "gamelog", payload: JSON.stringify(rolledJson) }, window.location.origin);
+                } catch (e) {
+                    console.log("could not forward game log entry to map frame: " + e.message);
+                }
+            }
 
             if (beyond20Installed && !beyond20OldMethod) {
                 sendRollToBeyond20(rolledJson);
