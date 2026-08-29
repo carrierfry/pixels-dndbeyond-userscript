@@ -692,9 +692,66 @@ if (runInFrame) {
         if (socket && socket.readyState === 1) {
             socket.send(event.data.payload);
         }
+        if (window.location.pathname.startsWith("/games/")) {
+            showMapRollPopup(event.data.payload);
+        }
     });
 }
 
+// D&D Beyond's maps VTT renders a dice popup above the bottom-right toolbar for
+// its own virtual rolls; rolls arriving over the bridge bypass that renderer, so
+// we draw a lookalike anchored above the dice button.
+function showMapRollPopup(payload) {
+    let message;
+    try {
+        message = JSON.parse(payload);
+    } catch {
+        return;
+    }
+    if (!message || message.eventType !== "dice/roll/fulfilled" || !message.data || !Array.isArray(message.data.rolls) || message.data.rolls.length === 0) return;
+    const roll = message.data.rolls[message.data.rolls.length - 1];
+    if (!roll.result) return;
+    if (!document.getElementById("pixels-map-popup-style")) {
+        const style = document.createElement("style");
+        style.id = "pixels-map-popup-style";
+        style.textContent = "[data-pixels-map-popup] { position: fixed; z-index: 100000; background: #12181c; color: #ecedee; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.5); font-family: 'Roboto', sans-serif; pointer-events: none; } [data-pixels-map-popup] .pixels-map-popup-arrow { position: absolute; bottom: -5px; width: 12px; height: 12px; background: #12181c; transform: rotate(45deg); } [data-pixels-map-popup] .pixels-map-popup-name { font-size: 14px; font-weight: 600; line-height: 1.3; } [data-pixels-map-popup] .pixels-map-popup-action { font-size: 14px; line-height: 1.3; } [data-pixels-map-popup] .pixels-map-popup-rolltype { font-weight: 700; } [data-pixels-map-popup] .pixels-map-popup-divider { width: 1px; align-self: stretch; background: rgba(236, 237, 238, .3); } [data-pixels-map-popup] .pixels-map-popup-total { font-size: 24px; font-weight: 700; min-width: 34px; text-align: right; }";
+        document.head.appendChild(style);
+    }
+    const existing = document.querySelector("[data-pixels-map-popup]");
+    if (existing) existing.remove();
+    const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+    const actionText = capitalize(message.data.action || "custom");
+    const rollTypeText = capitalize(roll.rollType || "roll");
+    const nameRaw = (message.data.context && message.data.context.name) || "";
+    const nameText = nameRaw.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+    const popup = document.createElement("div");
+    popup.setAttribute("data-pixels-map-popup", "");
+    popup.innerHTML = '<div class="pixels-map-popup-text"><div class="pixels-map-popup-name"></div><div class="pixels-map-popup-action"></div></div><div class="pixels-map-popup-divider"></div><div class="pixels-map-popup-total"></div><div class="pixels-map-popup-arrow"></div>';
+    popup.querySelector(".pixels-map-popup-name").textContent = nameText;
+    const actionSpan = popup.querySelector(".pixels-map-popup-action");
+    actionSpan.append(actionText + ": ");
+    const rollTypeSpan = document.createElement("span");
+    rollTypeSpan.className = "pixels-map-popup-rolltype";
+    rollTypeSpan.textContent = rollTypeText === "To hit" ? "To Hit" : rollTypeText;
+    actionSpan.append(rollTypeSpan);
+    popup.querySelector(".pixels-map-popup-rolltype").style.color = getRollTypeColor(roll.rollType || "roll");
+    popup.querySelector(".pixels-map-popup-total").textContent = roll.result.total;
+    document.body.appendChild(popup);
+    const anchor = document.querySelector("[data-testid='rollDiceButton']") || document.querySelector("[data-testid='bottomRightTools']");
+    if (anchor) {
+        const anchorRect = anchor.getBoundingClientRect();
+        const popupRect = popup.getBoundingClientRect();
+        popup.style.top = Math.round(anchorRect.top - popupRect.height - 14) + "px";
+        popup.style.right = Math.round(window.innerWidth - anchorRect.right + 16) + "px";
+        popup.querySelector(".pixels-map-popup-arrow").style.left = Math.max(16, Math.min(popupRect.width - 28, anchorRect.left + anchorRect.width / 2 - popupRect.left - 6)) + "px";
+    } else {
+        popup.style.right = "20px";
+        popup.style.bottom = "70px";
+    }
+    setTimeout(() => {
+        popup.remove();
+    }, 5000);
+}
 // Main function
 function main() {
     isMapIframe = isVttSheetIframe();
@@ -1956,12 +2013,12 @@ function rollDice(realDieType, value) {
             }
             doubledAmount = false;
 
-            document.querySelector("#advButton").style.backgroundColor = "darkgray";
-            document.querySelector("#critButton").style.backgroundColor = "darkgray";
-            document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
-            document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
-            document.querySelector("#selfButton").style.backgroundColor = "darkgray";
-            document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+            document.querySelector("#advButton")?.style.setProperty("background-color", "darkgray");
+            document.querySelector("#critButton")?.style.setProperty("background-color", "darkgray");
+            document.querySelector("#disadvButton")?.style.setProperty("background-color", "darkgray");
+            document.querySelector("#everyoneButton")?.style.setProperty("background-color", "darkgray");
+            document.querySelector("#selfButton")?.style.setProperty("background-color", "darkgray");
+            document.querySelector("#dmButton")?.style.setProperty("background-color", "darkgray");
 
             nextAdvantageRoll = false;
             nextDisadvantageRoll = false;
