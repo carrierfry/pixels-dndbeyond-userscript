@@ -8,3 +8,5 @@ test/.profile/
 test/.profile-beyond20/
 test/beyond20/
 test/package-lock.json
+test/.profile-bubble/
+test/.profile-*/
