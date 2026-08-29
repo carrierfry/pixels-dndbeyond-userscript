@@ -1,4 +1,4 @@
-// Debug: who activates pixel mode in the iframe?
+// E2E: top bar connect/pixelmode behavior with and without sheet iframe
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
@@ -27,6 +27,11 @@ function loadCookies() {
         return cookie;
     });
 }
+async function shot(page, name) {
+    fs.mkdirSync(path.join(__dirname, "artifacts"), { recursive: true });
+    await page.screenshot({ path: path.join(__dirname, "artifacts", `${name}.png`) });
+    console.log(`   screenshot: test/artifacts/${name}.png`);
+}
 
 (async () => {
     const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
@@ -43,27 +48,12 @@ function loadCookies() {
         if (navigator.bluetooth === undefined) {
             Object.defineProperty(navigator, "bluetooth", { value: { getAvailability: async () => true }, configurable: true });
         }
-        window.__msgLog = [];
-        const origAdd = window.addEventListener.bind(window);
-        window.addEventListener = function (type, fn, opts) {
-            if (type === "message") {
-                const wrapped = function (event) {
-                    try {
-                        if (event.data && event.data.source === "pixels-dndbeyond" && window.__msgLog.length < 100) {
-                            window.__msgLog.push(JSON.parse(JSON.stringify(event.data)));
-                        }
-                    } catch {}
-                    return fn.call(this, event);
-                };
-                return origAdd(type, wrapped, opts);
-            }
-            return origAdd(type, fn, opts);
-        };
     });
     await ctx.addCookies(loadCookies());
 
     const page = await ctx.newPage();
-    page.on("pageerror", (err) => console.log("[pageerror]", String(err).slice(0, 300)));
+    let errors = [];
+    page.on("pageerror", (err) => errors.push(String(err).slice(0, 200)));
     await page.goto("https://www.dndbeyond.com/characters/48300614", { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForTimeout(10000);
     await page.goto(MAP_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -74,7 +64,29 @@ function loadCookies() {
         await page.waitForTimeout(20000);
     }
     await page.keyboard.press("Escape");
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(2000);
+
+    // 1. WITHOUT sheet iframe: pixel mode click -> hint appears
+    await page.evaluate(() => document.querySelector("#pixels-map-pixelmode").click());
+    await page.waitForTimeout(800);
+    const hint = await page.evaluate(() => {
+        const el = document.querySelector("[data-pixels-map-popup]");
+        return el ? el.textContent : "(no hint)";
+    });
+    console.log("hint without iframe:", JSON.stringify(hint));
+    await shot(page, "probe-950-hint");
+
+    // 2. WITHOUT iframe: connect click -> should call requestMyPixel locally, no uncaught error
+    await page.waitForTimeout(4500);
+    await page.evaluate(() => document.querySelector("#pixels-map-connect").click());
+    await page.waitForTimeout(2000);
+    const connectLabel = await page.evaluate(() => ({
+        label: document.querySelector("#pixels-map-connect span").textContent,
+        badgeDisplay: document.querySelector("#pixels-map-connect .pixels-map-count").style.display || "(default)",
+    }));
+    console.log("connect button after click (no iframe):", JSON.stringify(connectLabel));
+
+    // 3. open sheet iframe -> status flows, badge stays hidden at 0 dice, label constant
     await page.evaluate(() => document.querySelector("[data-testid='sidebar-button']")?.click());
     await page.waitForTimeout(2500);
     await page.evaluate(() => document.querySelector("[data-testid='encounter-list-item'] summary")?.click());
@@ -89,16 +101,31 @@ function loadCookies() {
     await page.waitForTimeout(15000);
     const frame = page.frames().find((f) => f.url().includes("view=vtt"));
     if (!frame) throw new Error("no vtt frame");
-
-    const state = await frame.evaluate(() => ({ pixelMode: typeof pixelMode !== "undefined" ? pixelMode : "?", onlyOnce: typeof pixelModeOnlyOnce !== "undefined" ? pixelModeOnlyOnce : "?" }));
-    console.log("iframe state before any click:", JSON.stringify(state));
     await page.waitForTimeout(5000);
-    const state2 = await frame.evaluate(() => ({ pixelMode: typeof pixelMode !== "undefined" ? pixelMode : "?", onlyOnce: typeof pixelModeOnlyOnce !== "undefined" ? pixelModeOnlyOnce : "?" }));
-    console.log("iframe state after 5s poll:", JSON.stringify(state2));
-    const topMsgs = await page.evaluate(() => (window.__msgLog || []).filter((m) => m.type === "status").slice(-3));
-    console.log("top status msgs (last 3):", JSON.stringify(topMsgs));
-    const topCls = await page.evaluate(() => document.querySelector("#pixels-map-pixelmode")?.className);
-    console.log("top pixel mode class:", topCls);
+    const withIframe = await page.evaluate(() => ({
+        label: document.querySelector("#pixels-map-connect span").textContent,
+        badgeDisplay: document.querySelector("#pixels-map-connect .pixels-map-count").style.display || "(default)",
+        pixelModeCls: document.querySelector("#pixels-map-pixelmode").className,
+    }));
+    console.log("connect button with iframe open:", JSON.stringify(withIframe));
+
+    // 4. close the sheet -> button resets after poll
+    await page.evaluate(() => {
+        const closeBtn = Array.from(document.querySelectorAll("button")).find((b) => (b.getAttribute("aria-label") || "").toLowerCase().includes("close") && b.getBoundingClientRect().x < 400);
+        if (closeBtn) closeBtn.click();
+    });
+    await page.waitForTimeout(8000);
+    const afterClose = await page.evaluate(() => ({
+        label: document.querySelector("#pixels-map-connect span").textContent,
+        badgeDisplay: document.querySelector("#pixels-map-connect .pixels-map-count").style.display || "(default)",
+        pixelModeCls: document.querySelector("#pixels-map-pixelmode").className,
+        iframeCount: document.querySelectorAll("iframe[src*='view=vtt']").length,
+    }));
+    console.log("after sheet close:", JSON.stringify(afterClose));
+    await shot(page, "probe-951-after-close");
+
+    const realErrors = errors.filter((e) => !e.includes("Failed to execute 'json'"));
+    console.log("page errors (filtered):", realErrors.length ? realErrors : "none");
 
     await ctx.close();
 })().catch((e) => { console.error("FATAL:", e.message); process.exit(1); });

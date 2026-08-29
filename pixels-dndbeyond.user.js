@@ -699,6 +699,7 @@ if (runInFrame) {
         } else if (event.data.type === "command" && isVttSheetIframe()) {
             handlePixelsCommand(event.data.command);
         } else if (event.data.type === "status" && window.location.pathname.startsWith("/games/")) {
+            pixelsLastStatusAt = Date.now();
             updateMapPixelsUI(event.data);
         }
     });
@@ -714,6 +715,8 @@ function sendCommandToSheetIframes(command) {
     });
 }
 
+let pixelsLastStatusAt = 0;
+
 function addMapPixelsUI() {
     if (document.querySelector("#pixels-map-ui")) return true;
     const rightButtons = document.querySelector("[data-testid='quick-journal-button']")?.parentElement;
@@ -721,17 +724,41 @@ function addMapPixelsUI() {
     if (!document.getElementById("pixels-map-ui-style")) {
         const style = document.createElement("style");
         style.id = "pixels-map-ui-style";
-        style.textContent = "#pixels-map-ui { display: flex; gap: 8px; margin-right: 8px; } #pixels-map-ui button { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 4px; background: rgba(18, 24, 28, 0.9); border: 1px solid rgba(236, 237, 238, 0.2); color: #ecedee; font-family: 'Roboto', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; } #pixels-map-ui button:hover { border-color: rgba(236, 237, 238, 0.5); } #pixels-map-pixelmode.pixels-map-active { background: #c53131; border-color: #c53131; }";
+        style.textContent = "#pixels-map-ui { display: flex; gap: 8px; margin-right: 8px; } #pixels-map-ui button { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 4px; background: rgba(18, 24, 28, 0.9); border: 1px solid rgba(236, 237, 238, 0.2); color: #ecedee; font-family: 'Roboto', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; } #pixels-map-ui button:hover { border-color: rgba(236, 237, 238, 0.5); } #pixels-map-pixelmode.pixels-map-active { background: #c53131; border-color: #c53131; } #pixels-map-connect { position: relative; } #pixels-map-connect .pixels-map-count { display: none; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #4caf50; color: white; font-size: 11px; font-weight: 700; letter-spacing: 0; }";
         document.head.appendChild(style);
     }
     const container = document.createElement("div");
     container.id = "pixels-map-ui";
-    container.innerHTML = '<button id="pixels-map-pixelmode" title="Toggle Pixel Mode (rolls are then taken over by your Pixel dice)"><img src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/img/white.png" width="14" height="14" alt=""><span>Pixel Mode</span></button><button id="pixels-map-connect" title="Connect your Pixel dice"><span>Connect to Pixels</span></button>';
+    container.innerHTML = '<button id="pixels-map-pixelmode" title="Toggle Pixel Mode (rolls are then taken over by your Pixel dice)"><img src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/img/white.png" width="14" height="14" alt=""><span>Pixel Mode</span></button><button id="pixels-map-connect" title="Connect your Pixel dice"><span>Connect to Pixels</span><span class="pixels-map-count"></span></button>';
     rightButtons.insertBefore(container, rightButtons.firstChild);
-    document.querySelector("#pixels-map-pixelmode").onclick = () => sendCommandToSheetIframes("togglePixelMode");
-    document.querySelector("#pixels-map-connect").onclick = () => sendCommandToSheetIframes("connectPixel");
+    document.querySelector("#pixels-map-pixelmode").onclick = () => {
+        if (document.querySelectorAll("iframe[src*='view=vtt']").length > 0) {
+            sendCommandToSheetIframes("togglePixelMode");
+        } else {
+            showMapHint("Open a character sheet from the sidebar to roll with Pixels");
+        }
+    };
+    document.querySelector("#pixels-map-connect").onclick = () => {
+        if (document.querySelectorAll("iframe[src*='view=vtt']").length > 0) {
+            sendCommandToSheetIframes("connectPixel");
+        } else {
+            // no sheet iframe open: pair the die from the map frame itself; the
+            // permission is stored for the origin, so the sheet's auto-connect
+            // picks the die up once a sheet is opened
+            requestMyPixel().catch(() => showMapHint("Could not connect a Pixel die"));
+        }
+    };
     sendCommandToSheetIframes("getStatus");
-    setInterval(() => sendCommandToSheetIframes("getStatus"), 3000);
+    setInterval(() => {
+        if (document.querySelectorAll("iframe[src*='view=vtt']").length > 0) {
+            sendCommandToSheetIframes("getStatus");
+            if (Date.now() - pixelsLastStatusAt > 7000) {
+                updateMapPixelsUI({ pixelMode: false });
+            }
+        } else {
+            updateMapPixelsUI({ pixelMode: false, diceCount: Array.isArray(window.pixels) ? window.pixels.length : 0 });
+        }
+    }, 3000);
     return true;
 }
 
@@ -739,11 +766,30 @@ function updateMapPixelsUI(status) {
     const pixelModeButton = document.querySelector("#pixels-map-pixelmode");
     const connectButton = document.querySelector("#pixels-map-connect");
     if (!pixelModeButton || !connectButton) return;
-    pixelModeButton.classList.toggle("pixels-map-active", !!status.pixelMode);
-    const label = connectButton.querySelector("span");
-    if (label) {
-        label.textContent = status.diceCount > 0 ? "Pixels (" + status.diceCount + ")" : "Connect to Pixels";
+    if (typeof status.pixelMode === "boolean") {
+        pixelModeButton.classList.toggle("pixels-map-active", status.pixelMode);
     }
+    if (typeof status.diceCount === "number") {
+        const badge = connectButton.querySelector(".pixels-map-count");
+        if (badge) {
+            badge.textContent = status.diceCount > 0 ? String(status.diceCount) : "";
+            badge.style.display = status.diceCount > 0 ? "flex" : "none";
+        }
+    }
+}
+
+function showMapHint(text) {
+    const existing = document.querySelector("[data-pixels-map-popup]");
+    if (existing) existing.remove();
+    const popup = document.createElement("div");
+    popup.setAttribute("data-pixels-map-popup", "");
+    popup.textContent = text;
+    document.body.appendChild(popup);
+    popup.style.right = "20px";
+    popup.style.bottom = "70px";
+    setTimeout(() => {
+        popup.remove();
+    }, 4000);
 }
 
 function sendPixelsStatusToParent() {
@@ -2278,13 +2324,17 @@ async function handleConnection(pixel) {
         window.pixels.push(pixel);
         if (isMapIframe) {
             sendPixelsStatusToParent();
+        } else if (isMap) {
+            updateMapPixelsUI({ diceCount: window.pixels.length });
         }
     }
 
     addDieToTable(pixel);
     lightUpPixel(pixel, "connected");
-    document.querySelector(".pixels-info-box").style.display = "block";
-    updateCurrentPixels();
+    if (!(isMap && !isMapIframe)) {
+        document.querySelector(".pixels-info-box").style.display = "block";
+        updateCurrentPixels();
+    }
 
     if (!containsObject(pixel.systemId, systemIds) && !!navigator?.bluetooth?.getDevices) {
         systemIds.push(pixel.systemId);
@@ -2752,6 +2802,7 @@ function addDiceOverviewBox() {
 
 function addDieToTable(pixel) {
     let table = document.querySelector("#diceTable");
+    if (!table) return;
     let newRow = undefined;
     let onlyUpdate = false;
 
