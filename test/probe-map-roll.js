@@ -1,4 +1,4 @@
-// E2E: render pixel map popup and screenshot for visual comparison with DDB popup
+// Debug: who activates pixel mode in the iframe?
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
@@ -43,11 +43,27 @@ function loadCookies() {
         if (navigator.bluetooth === undefined) {
             Object.defineProperty(navigator, "bluetooth", { value: { getAvailability: async () => true }, configurable: true });
         }
+        window.__msgLog = [];
+        const origAdd = window.addEventListener.bind(window);
+        window.addEventListener = function (type, fn, opts) {
+            if (type === "message") {
+                const wrapped = function (event) {
+                    try {
+                        if (event.data && event.data.source === "pixels-dndbeyond" && window.__msgLog.length < 100) {
+                            window.__msgLog.push(JSON.parse(JSON.stringify(event.data)));
+                        }
+                    } catch {}
+                    return fn.call(this, event);
+                };
+                return origAdd(type, wrapped, opts);
+            }
+            return origAdd(type, fn, opts);
+        };
     });
     await ctx.addCookies(loadCookies());
 
     const page = await ctx.newPage();
-    page.on("pageerror", (err) => console.log("[pageerror]", String(err).slice(0, 400)));
+    page.on("pageerror", (err) => console.log("[pageerror]", String(err).slice(0, 300)));
     await page.goto("https://www.dndbeyond.com/characters/48300614", { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForTimeout(10000);
     await page.goto(MAP_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -59,27 +75,30 @@ function loadCookies() {
     }
     await page.keyboard.press("Escape");
     await page.waitForTimeout(1000);
-
-    // render our popup directly (synthetic fulfilled payload, check roll like the user's screenshot)
-    const res = await page.evaluate(() => {
-        const payload = JSON.stringify({
-            id: "x", dateTime: Date.now(), gameId: "5307773", userId: "110040536", source: "web",
-            data: { action: "intimidation", rollId: "r1", rolls: [{ diceNotationStr: "1d20", rollType: "check", rollKind: "", result: { constant: 0, values: [9], total: 9, text: "9" } }], context: { entityId: "116332191", entityType: "character", name: "OHNEBILD" } },
-            entityId: "116332191", entityType: "character", eventType: "dice/roll/fulfilled", persist: true, messageScope: "gameId", messageTarget: "5307773",
-        });
-        try {
-            showMapRollPopup(payload);
-            const el = document.querySelector("[data-pixels-map-popup]");
-            if (!el) return "(no popup)";
-            const r = el.getBoundingClientRect();
-            const a = document.querySelector("[data-testid='rollDiceButton']").getBoundingClientRect();
-            return { text: el.innerText, rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }, anchor: { right: Math.round(a.right), y: Math.round(a.y) } };
-        } catch (e) {
-            return "ERROR: " + e.message;
-        }
+    await page.evaluate(() => document.querySelector("[data-testid='sidebar-button']")?.click());
+    await page.waitForTimeout(2500);
+    await page.evaluate(() => document.querySelector("[data-testid='encounter-list-item'] summary")?.click());
+    await page.waitForTimeout(1000);
+    const box = await page.evaluate(() => {
+        const r = document.querySelector("[data-testid='encounter-list-item']").getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
     });
-    console.log("pixel popup:", JSON.stringify(res, null, 1));
-    await page.screenshot({ path: path.join(__dirname, "artifacts", "probe-800-pixel-popup-styled.png") });
+    await page.mouse.move(box.x, box.y, { steps: 8 });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => document.querySelector("[data-testid='open-character-sheet']").click());
+    await page.waitForTimeout(15000);
+    const frame = page.frames().find((f) => f.url().includes("view=vtt"));
+    if (!frame) throw new Error("no vtt frame");
+
+    const state = await frame.evaluate(() => ({ pixelMode: typeof pixelMode !== "undefined" ? pixelMode : "?", onlyOnce: typeof pixelModeOnlyOnce !== "undefined" ? pixelModeOnlyOnce : "?" }));
+    console.log("iframe state before any click:", JSON.stringify(state));
+    await page.waitForTimeout(5000);
+    const state2 = await frame.evaluate(() => ({ pixelMode: typeof pixelMode !== "undefined" ? pixelMode : "?", onlyOnce: typeof pixelModeOnlyOnce !== "undefined" ? pixelModeOnlyOnce : "?" }));
+    console.log("iframe state after 5s poll:", JSON.stringify(state2));
+    const topMsgs = await page.evaluate(() => (window.__msgLog || []).filter((m) => m.type === "status").slice(-3));
+    console.log("top status msgs (last 3):", JSON.stringify(topMsgs));
+    const topCls = await page.evaluate(() => document.querySelector("#pixels-map-pixelmode")?.className);
+    console.log("top pixel mode class:", topCls);
 
     await ctx.close();
 })().catch((e) => { console.error("FATAL:", e.message); process.exit(1); });

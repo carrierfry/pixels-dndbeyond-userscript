@@ -688,14 +688,82 @@ if (runInFrame) {
 
     // The sheet iframe forwards its rolls here; the top frame owns the game-log socket
     window.addEventListener("message", (event) => {
-        if (event.origin !== window.location.origin || !event.data || event.data.source !== "pixels-dndbeyond" || event.data.type !== "roll") return;
-        if (socket && socket.readyState === 1) {
-            socket.send(event.data.payload);
-        }
-        if (window.location.pathname.startsWith("/games/")) {
-            showMapRollPopup(event.data.payload);
+        if (event.origin !== window.location.origin || !event.data || event.data.source !== "pixels-dndbeyond") return;
+        if (event.data.type === "roll") {
+            if (socket && socket.readyState === 1) {
+                socket.send(event.data.payload);
+            }
+            if (window.location.pathname.startsWith("/games/")) {
+                showMapRollPopup(event.data.payload);
+            }
+        } else if (event.data.type === "command" && isVttSheetIframe()) {
+            handlePixelsCommand(event.data.command);
+        } else if (event.data.type === "status" && window.location.pathname.startsWith("/games/")) {
+            updateMapPixelsUI(event.data);
         }
     });
+}
+
+// On the maps VTT the Pixels controls live in the map top bar and drive the
+// sheet iframe (which owns all Pixel logic) via postMessage commands.
+function sendCommandToSheetIframes(command) {
+    document.querySelectorAll("iframe[src*='view=vtt']").forEach((frame) => {
+        try {
+            frame.contentWindow.postMessage({ source: "pixels-dndbeyond", type: "command", command: command }, window.location.origin);
+        } catch {}
+    });
+}
+
+function addMapPixelsUI() {
+    if (document.querySelector("#pixels-map-ui")) return true;
+    const rightButtons = document.querySelector("[data-testid='quick-journal-button']")?.parentElement;
+    if (!rightButtons) return false;
+    if (!document.getElementById("pixels-map-ui-style")) {
+        const style = document.createElement("style");
+        style.id = "pixels-map-ui-style";
+        style.textContent = "#pixels-map-ui { display: flex; gap: 8px; margin-right: 8px; } #pixels-map-ui button { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 4px; background: rgba(18, 24, 28, 0.9); border: 1px solid rgba(236, 237, 238, 0.2); color: #ecedee; font-family: 'Roboto', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; } #pixels-map-ui button:hover { border-color: rgba(236, 237, 238, 0.5); } #pixels-map-pixelmode.pixels-map-active { background: #c53131; border-color: #c53131; }";
+        document.head.appendChild(style);
+    }
+    const container = document.createElement("div");
+    container.id = "pixels-map-ui";
+    container.innerHTML = '<button id="pixels-map-pixelmode" title="Toggle Pixel Mode (rolls are then taken over by your Pixel dice)"><img src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/img/white.png" width="14" height="14" alt=""><span>Pixel Mode</span></button><button id="pixels-map-connect" title="Connect your Pixel dice"><span>Connect to Pixels</span></button>';
+    rightButtons.insertBefore(container, rightButtons.firstChild);
+    document.querySelector("#pixels-map-pixelmode").onclick = () => sendCommandToSheetIframes("togglePixelMode");
+    document.querySelector("#pixels-map-connect").onclick = () => sendCommandToSheetIframes("connectPixel");
+    sendCommandToSheetIframes("getStatus");
+    setInterval(() => sendCommandToSheetIframes("getStatus"), 3000);
+    return true;
+}
+
+function updateMapPixelsUI(status) {
+    const pixelModeButton = document.querySelector("#pixels-map-pixelmode");
+    const connectButton = document.querySelector("#pixels-map-connect");
+    if (!pixelModeButton || !connectButton) return;
+    pixelModeButton.classList.toggle("pixels-map-active", !!status.pixelMode);
+    const label = connectButton.querySelector("span");
+    if (label) {
+        label.textContent = status.diceCount > 0 ? "Pixels (" + status.diceCount + ")" : "Connect to Pixels";
+    }
+}
+
+function sendPixelsStatusToParent() {
+    try {
+        window.parent.postMessage({ source: "pixels-dndbeyond", type: "status", pixelMode: pixelMode, diceCount: Array.isArray(window.pixels) ? window.pixels.length : 0 }, window.location.origin);
+    } catch {}
+}
+
+function handlePixelsCommand(command) {
+    if (command === "togglePixelMode") {
+        // the hidden sheet button toggles via its mouseup handler; button != 0
+        // means "permanent" mode instead of "only for the next roll"
+        document.querySelector("#pixel-mode-button")?.dispatchEvent(new MouseEvent("mouseup", { button: 2 }));
+        setTimeout(sendPixelsStatusToParent, 300);
+    } else if (command === "connectPixel") {
+        requestMyPixel();
+        setTimeout(sendPixelsStatusToParent, 2000);
+    } else if (command === "getStatus") {
+        sendPixelsStatusToParent();
+    }
 }
 
 // D&D Beyond's maps VTT renders a dice popup above the bottom-right toolbar for
@@ -787,9 +855,13 @@ function main() {
 
     if (isMap && !isMapIframe) {
         // The map page itself only provides the game-log socket (used via the
-        // postMessage bridge below); the sheet runs in the sidebar iframe and
-        // drives all Pixels UI from there.
+        // postMessage bridge); the sheet runs in the sidebar iframe and drives
+        // all Pixel logic from there. The Pixels controls live here in the map
+        // top bar and talk to the sheet iframe via postMessage.
         doneOnlyOnceStuff = true;
+        if (!addMapPixelsUI()) {
+            setTimeout(main, 500);
+        }
         return;
     }
 
@@ -1625,15 +1697,9 @@ function addPixelsLogoButton() {
         button.appendChild(link);
 
         if (isMapIframe) {
-            // the vtt sheet iframe has no nav menu; put the connect link next
-            // to the Pixel Mode button in the mobile sheet header
-            button.className = "";
-            let connectButton = document.createElement("div");
-            connectButton.className = "ct-character-header-mobile__group ct-character-header-mobile__group--pixels-connect";
-            connectButton.appendChild(link);
-            document.querySelector(".ct-character-header-mobile__group--summary").appendChild(connectButton);
-            GM_addStyle(`.ct-character-header-mobile__group--pixels-connect { width: 110px; margin-left: calc(100% - 110px); font-size: 10px; line-height: 1; text-align: right; }`);
-            GM_addStyle(`.ct-character-header-mobile__group--pixels-connect a { color: white; text-decoration: none; }`);
+            // the map top bar hosts the connect button; the iframe only needs
+            // the Pixel logic, reached via postMessage commands
+            return;
         } else if (!isMap) {
             // find the last mm-nav-item and insert after it
             let lastNavItem = document.querySelector("#mega-menu-target > header > div > div > nav > ul").children;
@@ -2210,6 +2276,9 @@ async function handleConnection(pixel) {
         });
 
         window.pixels.push(pixel);
+        if (isMapIframe) {
+            sendPixelsStatusToParent();
+        }
     }
 
     addDieToTable(pixel);
@@ -2251,6 +2320,9 @@ function addPixelModeButton() {
     } else if (isMap) {
         document.querySelector("[class*='styles_scenarioMenuEncounters'").appendChild(div);
     } else if (isMapIframe) {
+        // keep the full toggle handlers available for postMessage commands,
+        // but the visible control lives in the map top bar
+        div.style.display = "none";
         document.querySelector(".ct-character-header-mobile__group--summary").appendChild(div);
     } else if (isTabletView) {
         document.querySelector(".ct-character-header-tablet__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-tablet__group--short-rest"));
