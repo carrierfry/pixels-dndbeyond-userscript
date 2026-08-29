@@ -793,10 +793,26 @@ function checkForOpenMapGameLog() {
     const list = getMapGamelogList();
     if (list === null) return;
     for (const json of mapGamelogQueue) {
-        if (!document.getElementById("pixels-gamelog-entry-" + json.data.rollId)) {
+        const el = document.getElementById("pixels-gamelog-entry-" + json.data.rollId);
+        if (el === null) {
             appendMapGamelogEntry(json, list);
+        } else {
+            const timeEl = el.querySelector("p[class*='__time']");
+            if (timeEl) {
+                timeEl.textContent = getRelativeTimeAgo(json.dateTime);
+            }
         }
     }
+}
+
+function getMapEntryAgeFromText(text) {
+    if (!text) return null;
+    const trimmed = text.trim();
+    if (trimmed === "just now") return 0;
+    const match = trimmed.match(/^(\d+)\s+(second|minute|hour|day)s?\s+ago$/);
+    if (!match) return null;
+    const multipliers = { "second": 1000, "minute": 60000, "hour": 3600000, "day": 86400000 };
+    return parseInt(match[1]) * multipliers[match[2]];
 }
 
 function getMapGamelogList() {
@@ -867,7 +883,30 @@ function appendMapGamelogEntry(json, list) {
     li.querySelector("p[class*='__notation']").textContent = roll.diceNotationStr;
     li.querySelector("span[class*='__rollResult']").textContent = roll.result.total;
     li.querySelector("p[class*='__time']").textContent = getRelativeTimeAgo(json.dateTime);
-    list.prepend(li);
+    // the log lists newest entries first; slot the entry in at its chronological
+    // position (same approach as the character sheet game log) instead of
+    // blindly prepending, so entries queued while the log was closed end up
+    // below native rolls made in the meantime
+    const ourAge = Math.max(0, Date.now() - json.dateTime);
+    let insertBefore = null;
+    for (const child of list.children) {
+        let age;
+        if (child.id && child.id.startsWith("pixels-gamelog-entry-")) {
+            const queued = mapGamelogQueue.find((q) => "pixels-gamelog-entry-" + q.data.rollId === child.id);
+            age = queued ? Math.max(0, Date.now() - queued.dateTime) : null;
+        } else {
+            age = getMapEntryAgeFromText(child.querySelector("p[class*='__time']")?.textContent);
+        }
+        if (age !== null && age > ourAge) {
+            insertBefore = child;
+            break;
+        }
+    }
+    if (insertBefore) {
+        list.insertBefore(li, insertBefore);
+    } else {
+        list.appendChild(li);
+    }
     const container = document.querySelector("[class*='messagesContainer']");
     if (container) {
         container.scrollTop = 0;

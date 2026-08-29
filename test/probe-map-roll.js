@@ -1,4 +1,4 @@
-// E2E: pixel roll injects into the map game log (queued while closed)
+// E2E: ordering of pixel vs virtual entries in the map game log
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
@@ -40,7 +40,7 @@ async function shot(page, name) {
         args: [
             `--disable-extensions-except=${EXTENSION_DIR}`,
             `--load-extension=${EXTENSION_DIR}`,
-            "--disable-dev-shm-usage", "--renderer-process-limit=2", "--js-flags=--max-old-space-size=512", "--disable-gpu", "--disable-background-networking", "--disable-sync",
+            "--disable-dev-shm-usage", "--renderer-process-limit=2", "--js-flags=--max-old-space-size=512", "--disable-gpu",
         ],
         viewport: { width: 1600, height: 900 },
     });
@@ -50,9 +50,8 @@ async function shot(page, name) {
         }
     });
     await ctx.addCookies(loadCookies());
-
     const page = await ctx.newPage();
-    page.on("pageerror", (err) => console.log("[pageerror]", String(err).slice(0, 300)));
+    page.on("pageerror", (err) => console.log("[pageerror]", String(err).slice(0, 200)));
     await page.goto("https://www.dndbeyond.com/characters/48300614", { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForTimeout(10000);
     await page.goto(MAP_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -65,7 +64,7 @@ async function shot(page, name) {
     await page.keyboard.press("Escape");
     await page.waitForTimeout(1000);
 
-    // open sheet iframe and roll TWICE while the game log is CLOSED
+    // open sheet, roll pixel (log closed -> queued)
     await page.evaluate(() => document.querySelector("[data-testid='sidebar-button']")?.click());
     await page.waitForTimeout(2500);
     await page.evaluate(() => document.querySelector("[data-testid='encounter-list-item'] summary")?.click());
@@ -80,46 +79,49 @@ async function shot(page, name) {
     await page.waitForTimeout(15000);
     const frame = page.frames().find((f) => f.url().includes("view=vtt"));
     if (!frame) throw new Error("no vtt frame");
-
     await frame.evaluate(() => rollDice("d20", 14));
-    await page.waitForTimeout(2000);
-    await frame.evaluate(() => rollDice("d20", 9));
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(2500);
 
-    const logClosed = await page.evaluate(() => ({
-        hasList: !!document.querySelector("[data-testid='gameLogListItem']"),
-        popup: !!document.querySelector("[data-pixels-map-popup]"),
-    }));
-    console.log("state with log closed (both rolls):", JSON.stringify(logClosed));
-    await shot(page, "probe-960-log-closed");
-
-    // open the game log -> queued entries must appear
+    // open log -> pixel entry flushes
     await page.evaluate(() => document.querySelector("[data-testid='gameLogButton']").click());
-    await page.waitForTimeout(2000);
-    const entries = await page.evaluate(() => {
-        const list = document.querySelector("[data-testid='gameLogListItem']")?.parentElement;
-        if (!list) return { list: false };
-        return {
-            list: true,
-            count: list.children.length,
-            pixelsEntries: Array.from(list.querySelectorAll("[id^='pixels-gamelog-entry-']")).map((e) => e.innerText.replace(/\n/g, " | ")),
-            firstChildText: list.children[0]?.innerText.replace(/\n/g, " | ").slice(0, 80),
-        };
-    });
-    console.log("game log after open:", JSON.stringify(entries, null, 1));
-    await shot(page, "probe-961-log-open");
+    await page.waitForTimeout(2500);
 
-    // roll again while log is OPEN -> appears immediately
-    await frame.evaluate(() => rollDice("d20", 20));
-    await page.waitForTimeout(4000);
-    const entries2 = await page.evaluate(() => {
+    const snap = () => page.evaluate(() => {
         const list = document.querySelector("[data-testid='gameLogListItem']")?.parentElement;
-        return {
-            pixelsEntries: list ? Array.from(list.querySelectorAll("[id^='pixels-gamelog-entry-']")).map((e) => e.innerText.replace(/\n/g, " | ")) : [],
-        };
+        if (!list) return null;
+        return Array.from(list.children).slice(0, 5).map((c) => {
+            const ours = !!(c.id && c.id.startsWith("pixels-gamelog-entry-"));
+            const t = c.querySelector("p[class*='__time']");
+            const r = c.querySelector("span[class*='__rollResult']");
+            return (ours ? "[PX] " : "[NV] ") + (r ? r.textContent : "?") + " @ " + (t ? t.textContent : "?");
+        });
     });
-    console.log("after roll with log open:", JSON.stringify(entries2, null, 1));
-    await shot(page, "probe-962-log-live");
+
+    console.log("after pixel roll flush:", JSON.stringify(await snap(), null, 1));
+
+    // roll a virtual d20 via the dice panel (native path) while log is open
+    await page.evaluate(() => document.querySelector("[data-testid='rollDiceButton']").click());
+    await page.waitForTimeout(2000);
+    await page.evaluate(() => {
+        const el = Array.from(document.querySelectorAll("button, [role='button'], li, div")).find((e) => (e.innerText || "").trim() === "d20");
+        if (el) el.click();
+    });
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => {
+        const el = Array.from(document.querySelectorAll("button")).find((e) => /^roll$/i.test((e.innerText || "").trim()));
+        if (el) el.click();
+    });
+    await page.waitForTimeout(4000);
+    console.log("after virtual roll:", JSON.stringify(await snap(), null, 1));
+    await shot(page, "probe-970-ordering");
+
+    // our pixel entry time must have been refreshed by the poller (not stale "just now" forever)
+    await page.waitForTimeout(65000);
+    const pixelTime = await page.evaluate(() => {
+        const el = document.querySelector("[id^='pixels-gamelog-entry-'] p[class*='__time']");
+        return el ? el.textContent : "(none)";
+    });
+    console.log("pixel entry time after 65s:", pixelTime);
 
     await ctx.close();
 })().catch((e) => { console.error("FATAL:", e.message); process.exit(1); });
