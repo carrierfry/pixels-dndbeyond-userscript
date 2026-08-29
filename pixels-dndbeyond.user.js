@@ -904,6 +904,7 @@ function main() {
         // postMessage bridge); the sheet runs in the sidebar iframe and drives
         // all Pixel logic from there. The Pixels controls live here in the map
         // top bar and talk to the sheet iframe via postMessage.
+        checkForAutoConnect();
         doneOnlyOnceStuff = true;
         if (!addMapPixelsUI()) {
             setTimeout(main, 500);
@@ -2244,27 +2245,29 @@ async function handleConnection(pixel) {
 
     if (!containsObject(pixel, window.pixels)) {
 
-        pixel.addEventListener("roll", (face) => {
-            // console.log(`=> rolled face: ${face}`);
+        if (!(isMap && !isMapIframe)) {
+            pixel.addEventListener("roll", (face) => {
+                // console.log(`=> rolled face: ${face}`);
 
-            if (useCustomDebouncing && pixel.debounceTimeStart !== -1) {
-                if (pixel.debounceTimeEnd - pixel.debounceTimeStart < debounceThreshold) {
-                    // console.log((debounceTimeEnd - debounceTimeStart));
-                    // console.log("Roll too fast, ignoring...");
-                    pixel.stopAllAnimations();
-                    return;
+                if (useCustomDebouncing && pixel.debounceTimeStart !== -1) {
+                    if (pixel.debounceTimeEnd - pixel.debounceTimeStart < debounceThreshold) {
+                        // console.log((debounceTimeEnd - debounceTimeStart));
+                        // console.log("Roll too fast, ignoring...");
+                        pixel.stopAllAnimations();
+                        return;
+                    }
                 }
-            }
 
-            pixel.debounceTimeStart = -1;
-            pixel.debounceTimeEnd = -1;
-            // For now only D20, other dice in the future when I have my own dice and can explore the data structures :(
-            if (pixel.dieType === "d6pipped") {
-                rollDice("d6", face);
-            } else {
-                rollDice(pixel.dieType, face);
-            }
-        });
+                pixel.debounceTimeStart = -1;
+                pixel.debounceTimeEnd = -1;
+                // For now only D20, other dice in the future when I have my own dice and can explore the data structures :(
+                if (pixel.dieType === "d6pipped") {
+                    rollDice("d6", face);
+                } else {
+                    rollDice(pixel.dieType, face);
+                }
+            });
+        }
 
         pixel.addEventListener("rollState", (state) => {
             // console.log(`=> rollState: ${state}`);
