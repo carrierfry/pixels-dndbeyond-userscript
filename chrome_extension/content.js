@@ -787,11 +787,52 @@ function showMapHint(text) {
 // panel may be closed; entries queue up and are injected once it is open
 // (and re-injected if the panel re-renders and drops them).
 let mapGamelogQueue = [];
+let mapLogObservedList = null;
+
+// the log list renders with flex-direction: column-reverse, so the chronologically
+// newest entry must be the DOM-first child; DDB appends its own live entries at
+// the DOM end (visually above older rolls), so move them up like the character
+// sheet game log observer does
+const mapLogObserver = new MutationObserver((mutationList) => {
+    const list = getMapGamelogList();
+    if (list === null) return;
+    const candidates = [];
+    for (const mutation of mutationList) {
+        for (const addedNode of mutation.addedNodes) {
+            if (addedNode.nodeType === 1 && addedNode.getAttribute && addedNode.getAttribute("data-testid") === "gameLogListItem" && !(addedNode.id || "").startsWith("pixels-gamelog-entry-") && !addedNode.classList.contains("pixels-reordered-entry")) {
+                candidates.push(addedNode);
+            }
+        }
+    }
+    // a single mutation batch with many entries is the history (re)render on
+    // log open or scroll; reordering those would reverse the whole list
+    if (candidates.length === 0 || candidates.length > 2) return;
+    for (const addedNode of candidates) {
+        setTimeout(() => {
+            if (addedNode.parentElement === list && list.firstElementChild !== addedNode) {
+                addedNode.classList.add("pixels-reordered-entry");
+                list.prepend(addedNode);
+                const container = document.querySelector("[class*='messagesContainer']");
+                if (container) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            }
+        }, 100);
+    }
+});
 
 function checkForOpenMapGameLog() {
     if (mapGamelogQueue.length === 0) return;
     const list = getMapGamelogList();
-    if (list === null) return;
+    if (list === null) {
+        mapLogObservedList = null;
+        return;
+    }
+    if (list !== mapLogObservedList) {
+        mapLogObserver.disconnect();
+        mapLogObserver.observe(list, { childList: true });
+        mapLogObservedList = list;
+    }
     for (const json of mapGamelogQueue) {
         const el = document.getElementById("pixels-gamelog-entry-" + json.data.rollId);
         if (el === null) {
@@ -884,9 +925,8 @@ function appendMapGamelogEntry(json, list) {
     li.querySelector("span[class*='__rollResult']").textContent = roll.result.total;
     li.querySelector("p[class*='__time']").textContent = getRelativeTimeAgo(json.dateTime);
     // the log lists newest entries first; slot the entry in at its chronological
-    // position (same approach as the character sheet game log) instead of
-    // blindly prepending, so entries queued while the log was closed end up
-    // below native rolls made in the meantime
+    // position instead of blindly prepending, so entries queued while the log
+    // was closed end up below native rolls made in the meantime
     const ourAge = Math.max(0, Date.now() - json.dateTime);
     let insertBefore = null;
     for (const child of list.children) {
@@ -905,7 +945,7 @@ function appendMapGamelogEntry(json, list) {
     if (insertBefore) {
         list.insertBefore(li, insertBefore);
     } else {
-        list.appendChild(li);
+        list.prepend(li);
     }
     const container = document.querySelector("[class*='messagesContainer']");
     if (container) {
