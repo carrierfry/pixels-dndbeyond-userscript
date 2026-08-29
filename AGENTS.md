@@ -21,18 +21,26 @@ It is shipped in two forms that share essentially the same logic:
 > URLs replaced by local `lib/*.js` files referenced from `manifest.json`.
 > When you change logic in one, change the other the same way. The version
 > strings in the userscript header, `manifest.json`, and any release commit
-> messages should also match (current: `1.0.4.1`).
+> messages should also match (current: `1.0.6.0`).
 
 Supported pages (from `@match` / manifest `matches`):
 - `https://www.dndbeyond.com/characters/*`
 - `https://www.dndbeyond.com/combat-tracker/*` (encounter builder)
 - `https://www.dndbeyond.com/encounters/*`, `/my-encounters*`, `/encounter-builder*`
-- `https://www.dndbeyond.com/games/*` (maps) — userscript only
+- `https://www.dndbeyond.com/games/*` (maps)
 
 Runtime is the page's MAIN world (the content script declares `"world":
 "MAIN"`, and the userscript runs in the page context via `@grant none`). It
 needs access to `window.WebSocket`, `navigator.bluetooth`, D&D Beyond's
-in-page globals, and the Beyond20 extension's `CustomEvent` bridge.
+in-page globals, and the Beyond20 extension's `CustomEvent` bridge. On the
+maps VTT the sheet is a same-origin iframe
+(`/characters/<id>?view=vtt&gameId=...`): the content script declares
+`"all_frames": true` (Tampermonkey injects into iframes by default) and only
+activates in frames that are the top window or such a sheet iframe
+(`runInFrame` gate). The iframe has no game-log socket of its own — its rolls
+are forwarded to the top frame (which owns the socket) via a `postMessage`
+bridge; the top frame itself intentionally runs no Pixels UI (`main()`
+early-exits for `isMap && !isMapIframe`).
 
 ## 2. Repository layout
 

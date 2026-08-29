@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.5.3
+// @version      1.0.6.0
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -460,6 +460,19 @@ let currentlySwapped = false;
 
 let isEncounterBuilder = false;
 let isMap = false;
+let isMapIframe = false;
+
+// The maps VTT loads the character sheet as a same-origin iframe
+// (/characters/<id>?view=vtt&gameId=...). That iframe has no game-log socket of
+// its own; rolls are forwarded via postMessage to the top frame, which owns it.
+function isVttSheetIframe() {
+    try {
+        return window.self !== window.top && /\/games\//.test(window.parent.location.href);
+    } catch (e) {
+        return false;
+    }
+}
+const runInFrame = window.self === window.top || isVttSheetIframe();
 
 let alreadyHandledMouseLeave = false;
 
@@ -521,7 +534,9 @@ function installPixelModeCapture() {
         pixelSwappedHandlers.get(el)(e);
     }, true);
 }
-installPixelModeCapture();
+if (runInFrame) {
+    installPixelModeCapture();
+}
 
 // Shared handler invoked by the capture-phase listeners for swapped dice buttons.
 // Always arms a Pixel roll (currentlyExpectedRoll) and lights up matching dice.
@@ -633,46 +648,56 @@ const observer = new MutationObserver(callback);
 let socket = null;
 const nativeWebSocket = window.WebSocket;
 function interceptSocket() {
-    window.WebSocket = function (...args) {
-        console.log("Intercepting socket");
-        const socketTmp = new nativeWebSocket(...args);
-        socket = socketTmp;
+    window.WebSocket = class WebSocketHook extends nativeWebSocket {
+        constructor(...args) {
+            super(...args);
+            console.log("Intercepting socket");
+            socket = this;
 
-        socket.addEventListener("close", (event) => {
-            interceptSocket();
-        });
+            this.addEventListener("close", (event) => {
+                interceptSocket();
+            });
 
-        checkForOtherPeoplesRolls();
+            checkForOtherPeoplesRolls();
 
-        window.WebSocket = nativeWebSocket;
-
-        return socketTmp;
+            window.WebSocket = nativeWebSocket;
+        }
     };
 }
-interceptSocket();
+if (runInFrame) {
+    interceptSocket();
 
+    setTimeout(() => {
+        if (!alreadyNavigated && !(/https:\/\/www.dndbeyond.com\/encounters\/*/.test(window.location.href) || /https:\/\/www.dndbeyond.com\/my-encounters*/.test(window.location.href) || /https:\/\/www.dndbeyond.com\/encounter-builder*/.test(window.location.href))) {
+            main();
+        }
+    }, 500);
+    navigation.addEventListener("navigate", (event) => {
+        lastURL = currentURL;
+        currentURL = event.destination.url;
+        console.log("Navigated");
+        if (checkIfNavigatedToEncounterBuilder()) {
+            alreadyNavigated = true;
+            pixelMode = false;
+            main();
+            console.log("Navigated to Encounter Builder");
+        } else {
+            alreadyNavigated = false;
+        }
+    });
 
-setTimeout(() => {
-    if (!alreadyNavigated && !(/https:\/\/www.dndbeyond.com\/encounters\/*/.test(window.location.href) || /https:\/\/www.dndbeyond.com\/my-encounters*/.test(window.location.href) || /https:\/\/www.dndbeyond.com\/encounter-builder*/.test(window.location.href))) {
-        main();
-    }
-}, 500);
-navigation.addEventListener("navigate", (event) => {
-    lastURL = currentURL;
-    currentURL = event.destination.url;
-    console.log("Navigated");
-    if (checkIfNavigatedToEncounterBuilder()) {
-        alreadyNavigated = true;
-        pixelMode = false;
-        main();
-        console.log("Navigated to Encounter Builder");
-    } else {
-        alreadyNavigated = false;
-    }
-});
+    // The sheet iframe forwards its rolls here; the top frame owns the game-log socket
+    window.addEventListener("message", (event) => {
+        if (event.origin !== window.location.origin || !event.data || event.data.source !== "pixels-dndbeyond" || event.data.type !== "roll") return;
+        if (socket && socket.readyState === 1) {
+            socket.send(event.data.payload);
+        }
+    });
+}
 
 // Main function
 function main() {
+    isMapIframe = isVttSheetIframe();
     if (window.location.href.includes("games")) {
         isMap = true;
         if (!checkIfMapIsLoaded()) {
@@ -692,22 +717,30 @@ function main() {
         }
     }
 
-    if ((!socket || socket.readyState !== 1) && socketRetryCount < 8) {
+    if (!isMapIframe && (!socket || socket.readyState !== 1) && socketRetryCount < 8) {
         console.log("socket not ready");
         setTimeout(main, 500);
         socketRetryCount++;
         return;
     }
 
-    if (navigator.bluetooth === undefined) {
+    if (!isMap && !isMapIframe && navigator.bluetooth === undefined) {
         alert("Bluetooth functionality is disabled in your Browser. Make sure the chrome flag chrome://flags/#enable-web-bluetooth-confirm-pairing-support is enabled!");
+        return;
+    }
+
+    if (isMap && !isMapIframe) {
+        // The map page itself only provides the game-log socket (used via the
+        // postMessage bridge below); the sheet runs in the sidebar iframe and
+        // drives all Pixels UI from there.
+        doneOnlyOnceStuff = true;
         return;
     }
 
     navigator.bluetooth.getAvailability().then(isBluetoothAvailable => {
         if (isBluetoothAvailable) {
             setTimeout(() => {
-                if (socket && socket.readyState === 1 && !isEncounterBuilder && !isMap) {
+                if (socket && socket.readyState === 1 && !isEncounterBuilder && !isMap && !isMapIframe) {
                     getCompleteCharacterData();
                 }
             }, 1000);
@@ -730,7 +763,7 @@ function main() {
                 GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color:  ${color} !important; }`);
                 GM_addStyle(`.ct-character-header-desktop__group--pixels-not-available { cursor: default !important; background-color: darkgray !important; border-color: darkgray !important; }`);
                 GM_addStyle(`#red-pixel-icon { filter: brightness(30%) sepia(1) saturate(25); }`);
-            } else {
+            } else if (!isMapIframe) {
                 GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color: #1b9af0 !important; color: white !important; }`);
                 encounterBuilderAddEventListeners();
             }
@@ -1535,7 +1568,17 @@ function addPixelsLogoButton() {
         };
         button.appendChild(link);
 
-        if (!isMap) {
+        if (isMapIframe) {
+            // the vtt sheet iframe has no nav menu; put the connect link next
+            // to the Pixel Mode button in the mobile sheet header
+            button.className = "";
+            let connectButton = document.createElement("div");
+            connectButton.className = "ct-character-header-mobile__group ct-character-header-mobile__group--pixels-connect";
+            connectButton.appendChild(link);
+            document.querySelector(".ct-character-header-mobile__group--summary").appendChild(connectButton);
+            GM_addStyle(`.ct-character-header-mobile__group--pixels-connect { width: 110px; margin-left: calc(100% - 110px); font-size: 10px; line-height: 1; text-align: right; }`);
+            GM_addStyle(`.ct-character-header-mobile__group--pixels-connect a { color: white; text-decoration: none; }`);
+        } else if (!isMap) {
             // find the last mm-nav-item and insert after it
             let lastNavItem = document.querySelector("#mega-menu-target > header > div > div > nav > ul").children;
             link.className = document.querySelector("#mega-menu-target > header > div > div > nav > ul").lastChild.firstChild.className;;
@@ -1554,7 +1597,7 @@ function addPixelsLogoButton() {
 
 // The following 5 functions get different information from DOM elements and the URL
 function getCharacterId() {
-    let url = window.location.href;
+    let url = window.location.href.split("?")[0];
     let urlParts = url.split("/");
     let characterId = urlParts[urlParts.length - 1];
     return characterId;
@@ -1566,6 +1609,19 @@ function getCharacterName() {
         name = document.querySelector(".mon-stat-block__name");
     } else if (isMap) {
         return "Dungeon Master";
+    } else if (isMapIframe) {
+        // the vtt sheet iframe does not render the character name; read it
+        // from the sidebar panel header of the map page
+        name = document.querySelector("[class*='characterName']");
+        if (name === null) {
+            try {
+                name = window.parent.document.querySelector("aside[data-testid='sidebar'] h2[class*='heading']");
+            } catch (e) {}
+        }
+        if (name === null) {
+            return "Unknown Adventurer";
+        }
+        return name.innerText;
     } else {
         return document.querySelector("[class*='characterName']").innerText;
     }
@@ -1589,6 +1645,13 @@ function getGameId() {
         const match = url.match(/\/games\/(\d+)/);
         gameId = match[1];
         lastGameId = gameId;
+    } else if (isMapIframe) {
+        gameId = new URLSearchParams(window.location.search).get("gameId");
+        if (gameId === null) {
+            lastGameId = 0;
+        } else {
+            lastGameId = gameId;
+        }
     } else {
         if (!isMobileView && !isTabletView) {
             gameId = document.querySelector(".ddbc-tooltip").firstChild;
@@ -1606,8 +1669,16 @@ function getGameId() {
 }
 
 function getUserId() {
-    let userId = document.querySelector("#message-broker-client").getAttribute("data-userid");
-    return userId;
+    let broker = document.querySelector("#message-broker-client");
+    if (broker === null && window.parent !== window) {
+        try {
+            broker = window.parent.document.querySelector("#message-broker-client");
+        } catch (e) {}
+    }
+    if (broker !== null) {
+        return broker.getAttribute("data-userid");
+    }
+    return new URLSearchParams(window.location.search).get("userId");
 }
 
 function getAvatarUrl() {
@@ -1680,6 +1751,17 @@ function getCompleteCharacterData() {
 }
 
 // "Rolls" a die. You can specify the dice type and value and it will send the appropriate messages to the server.
+// In the maps VTT the sheet lives in an iframe without its own game-log socket;
+// rolls are handed to the top frame via postMessage (see the message listener
+// installed next to interceptSocket()).
+function sendRollMessage(jsonString) {
+    try {
+        window.parent.postMessage({ source: "pixels-dndbeyond", type: "roll", payload: jsonString }, window.location.origin);
+    } catch (e) {
+        console.log("could not forward roll to map frame: " + e.message);
+    }
+}
+
 function rollDice(realDieType, value) {
     let modifier = 0;
     let multiRollComplete = false;
@@ -1773,6 +1855,8 @@ function rollDice(realDieType, value) {
 
             if (socket && socket.readyState === 1) {
                 socket.send(JSON.stringify(initJson));
+            } else if (isMapIframe) {
+                sendRollMessage(JSON.stringify(initJson));
             }
 
             if (value === undefined) {
@@ -1794,6 +1878,10 @@ function rollDice(realDieType, value) {
                 setTimeout(() => {
                     // console.log("sending value: " + dieValue);
                     socket.send(JSON.stringify(rolledJson));
+                }, 1000);
+            } else if (isMapIframe) {
+                setTimeout(() => {
+                    sendRollMessage(JSON.stringify(rolledJson));
                 }, 1000);
             }
 
@@ -2106,6 +2194,8 @@ function addPixelModeButton() {
         document.querySelector(".combat-tracker__header").appendChild(div);
     } else if (isMap) {
         document.querySelector("[class*='styles_scenarioMenuEncounters'").appendChild(div);
+    } else if (isMapIframe) {
+        document.querySelector(".ct-character-header-mobile__group--summary").appendChild(div);
     } else if (isTabletView) {
         document.querySelector(".ct-character-header-tablet__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-tablet__group--short-rest"));
     } else if (isMobileView) {
@@ -3740,7 +3830,7 @@ function checkIfCharacterSheetLoaded() {
 }
 
 function checkIfMapIsLoaded() {
-    if (document.querySelector("[data-testid='bottomRightTools'") !== null) {
+    if (document.querySelector("[data-testid='sidebar-button']") !== null) {
         return true;
     }
     return false;
