@@ -692,25 +692,24 @@ function showMapRollPopup(payload) {
     if (!document.getElementById("pixels-map-popup-style")) {
         const style = document.createElement("style");
         style.id = "pixels-map-popup-style";
-        style.textContent = "[data-pixels-map-popup] { position: fixed; z-index: 100000; background: #12181c; color: #ecedee; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.5); font-family: 'Roboto', sans-serif; pointer-events: none; } [data-pixels-map-popup] .pixels-map-popup-arrow { position: absolute; bottom: -5px; width: 12px; height: 12px; background: #12181c; transform: rotate(45deg); } [data-pixels-map-popup] .pixels-map-popup-name { font-size: 14px; font-weight: 600; line-height: 1.3; } [data-pixels-map-popup] .pixels-map-popup-action { font-size: 14px; line-height: 1.3; } [data-pixels-map-popup] .pixels-map-popup-rolltype { font-weight: 700; } [data-pixels-map-popup] .pixels-map-popup-divider { width: 1px; align-self: stretch; background: rgba(236, 237, 238, .3); } [data-pixels-map-popup] .pixels-map-popup-total { font-size: 24px; font-weight: 700; min-width: 34px; text-align: right; }";
+        style.textContent = "[data-pixels-map-popup] { position: fixed; z-index: 100000; background: rgba(18, 24, 28, 0.85); color: #ecedee; border-radius: 8px; padding: 16px 0 16px 16px; font-family: 'Roboto', sans-serif; pointer-events: none; } [data-pixels-map-popup] .pixels-map-popup-arrow { position: absolute; bottom: -5px; width: 12px; height: 12px; background: #12181c; transform: rotate(45deg); } [data-pixels-map-popup] .pixels-map-popup-name { font-size: 14px; font-weight: 500; line-height: 18px; } [data-pixels-map-popup] .pixels-map-popup-row { display: flex; align-items: center; } [data-pixels-map-popup] .pixels-map-popup-action { font-size: 16px; font-weight: 400; line-height: 24px; } [data-pixels-map-popup] .pixels-map-popup-rolltype { font-weight: 700; margin-left: 4px; text-transform: capitalize; } [data-pixels-map-popup] .pixels-map-popup-total { font-size: 24px; font-weight: 700; line-height: 24px; margin-left: 16px; padding: 0 32px; border-left: 1px solid rgba(236, 237, 238, 0.25); display: flex; align-items: center; }";
         document.head.appendChild(style);
     }
     const existing = document.querySelector("[data-pixels-map-popup]");
     if (existing) existing.remove();
     const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
     const actionText = capitalize(message.data.action || "custom");
-    const rollTypeText = capitalize(roll.rollType || "roll");
     const nameRaw = (message.data.context && message.data.context.name) || "";
     const nameText = nameRaw.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
     const popup = document.createElement("div");
     popup.setAttribute("data-pixels-map-popup", "");
-    popup.innerHTML = '<div class="pixels-map-popup-text"><div class="pixels-map-popup-name"></div><div class="pixels-map-popup-action"></div></div><div class="pixels-map-popup-divider"></div><div class="pixels-map-popup-total"></div><div class="pixels-map-popup-arrow"></div>';
+    popup.innerHTML = '<div class="pixels-map-popup-name"></div><div class="pixels-map-popup-row"><div class="pixels-map-popup-action"></div><div class="pixels-map-popup-total"></div></div><div class="pixels-map-popup-arrow"></div>';
     popup.querySelector(".pixels-map-popup-name").textContent = nameText;
     const actionSpan = popup.querySelector(".pixels-map-popup-action");
     actionSpan.append(actionText + ": ");
     const rollTypeSpan = document.createElement("span");
     rollTypeSpan.className = "pixels-map-popup-rolltype";
-    rollTypeSpan.textContent = rollTypeText === "To hit" ? "To Hit" : rollTypeText;
+    rollTypeSpan.textContent = roll.rollType || "roll";
     actionSpan.append(rollTypeSpan);
     popup.querySelector(".pixels-map-popup-rolltype").style.color = getRollTypeColor(roll.rollType || "roll");
     popup.querySelector(".pixels-map-popup-total").textContent = roll.result.total;
@@ -719,8 +718,8 @@ function showMapRollPopup(payload) {
     if (anchor) {
         const anchorRect = anchor.getBoundingClientRect();
         const popupRect = popup.getBoundingClientRect();
-        popup.style.top = Math.round(anchorRect.top - popupRect.height - 14) + "px";
-        popup.style.right = Math.round(window.innerWidth - anchorRect.right + 16) + "px";
+        popup.style.top = Math.round(anchorRect.top - popupRect.height - 20) + "px";
+        popup.style.right = Math.max(8, Math.round(window.innerWidth - anchorRect.right - 76)) + "px";
         popup.querySelector(".pixels-map-popup-arrow").style.left = Math.max(16, Math.min(popupRect.width - 28, anchorRect.left + anchorRect.width / 2 - popupRect.left - 6)) + "px";
     } else {
         popup.style.right = "20px";
