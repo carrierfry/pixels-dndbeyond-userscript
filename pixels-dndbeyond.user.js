@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixels DnD Beyond
 // @namespace    http://tampermonkey.net/
-// @version      1.0.5.3
+// @version      1.0.6.1
 // @description  Use Pixel Dice on DnD Beyond
 // @author       carrierfry
 // @license      MIT
@@ -460,6 +460,19 @@ let currentlySwapped = false;
 
 let isEncounterBuilder = false;
 let isMap = false;
+let isMapIframe = false;
+
+// The maps VTT loads the character sheet as a same-origin iframe
+// (/characters/<id>?view=vtt&gameId=...). That iframe has no game-log socket of
+// its own; rolls are forwarded via postMessage to the top frame, which owns it.
+function isVttSheetIframe() {
+    try {
+        return window.self !== window.top && /\/games\//.test(window.parent.location.href);
+    } catch (e) {
+        return false;
+    }
+}
+const runInFrame = window.self === window.top || isVttSheetIframe();
 
 let alreadyHandledMouseLeave = false;
 
@@ -521,7 +534,9 @@ function installPixelModeCapture() {
         pixelSwappedHandlers.get(el)(e);
     }, true);
 }
-installPixelModeCapture();
+if (runInFrame) {
+    installPixelModeCapture();
+}
 
 // Shared handler invoked by the capture-phase listeners for swapped dice buttons.
 // Always arms a Pixel roll (currentlyExpectedRoll) and lights up matching dice.
@@ -633,46 +648,409 @@ const observer = new MutationObserver(callback);
 let socket = null;
 const nativeWebSocket = window.WebSocket;
 function interceptSocket() {
-    window.WebSocket = function (...args) {
-        console.log("Intercepting socket");
-        const socketTmp = new nativeWebSocket(...args);
-        socket = socketTmp;
+    window.WebSocket = class WebSocketHook extends nativeWebSocket {
+        constructor(...args) {
+            super(...args);
+            console.log("Intercepting socket");
+            socket = this;
 
-        socket.addEventListener("close", (event) => {
-            interceptSocket();
-        });
+            this.addEventListener("close", (event) => {
+                interceptSocket();
+            });
 
-        checkForOtherPeoplesRolls();
+            checkForOtherPeoplesRolls();
 
-        window.WebSocket = nativeWebSocket;
-
-        return socketTmp;
+            window.WebSocket = nativeWebSocket;
+        }
     };
 }
-interceptSocket();
+if (runInFrame) {
+    interceptSocket();
 
+    setTimeout(() => {
+        if (!alreadyNavigated && !(/https:\/\/www.dndbeyond.com\/encounters\/*/.test(window.location.href) || /https:\/\/www.dndbeyond.com\/my-encounters*/.test(window.location.href) || /https:\/\/www.dndbeyond.com\/encounter-builder*/.test(window.location.href))) {
+            main();
+        }
+    }, 500);
+    navigation.addEventListener("navigate", (event) => {
+        lastURL = currentURL;
+        currentURL = event.destination.url;
+        console.log("Navigated");
+        if (checkIfNavigatedToEncounterBuilder()) {
+            alreadyNavigated = true;
+            pixelMode = false;
+            main();
+            console.log("Navigated to Encounter Builder");
+        } else {
+            alreadyNavigated = false;
+        }
+    });
 
-setTimeout(() => {
-    if (!alreadyNavigated && !(/https:\/\/www.dndbeyond.com\/encounters\/*/.test(window.location.href) || /https:\/\/www.dndbeyond.com\/my-encounters*/.test(window.location.href) || /https:\/\/www.dndbeyond.com\/encounter-builder*/.test(window.location.href))) {
-        main();
+    // The sheet iframe forwards its rolls here; the top frame owns the game-log socket
+    window.addEventListener("message", (event) => {
+        if (event.origin !== window.location.origin || !event.data || event.data.source !== "pixels-dndbeyond") return;
+        if (event.data.type === "roll") {
+            if (socket && socket.readyState === 1) {
+                socket.send(event.data.payload);
+            }
+            if (window.location.pathname.startsWith("/games/")) {
+                showMapRollPopup(event.data.payload);
+            }
+        } else if (event.data.type === "command" && isVttSheetIframe()) {
+            handlePixelsCommand(event.data.command);
+        } else if (event.data.type === "gamelog" && window.location.pathname.startsWith("/games/")) {
+            let json;
+            try {
+                json = JSON.parse(event.data.payload);
+            } catch {
+                return;
+            }
+            if (json && json.data && json.data.rollId && !mapGamelogQueue.some((q) => q.data.rollId === json.data.rollId)) {
+                mapGamelogQueue.push(json);
+                if (mapGamelogQueue.length > 50) {
+                    mapGamelogQueue.shift();
+                }
+            }
+        } else if (event.data.type === "status" && window.location.pathname.startsWith("/games/")) {
+            pixelsLastStatusAt = Date.now();
+            updateMapPixelsUI(event.data);
+        }
+    });
+}
+
+// On the maps VTT the Pixels controls live in the map top bar and drive the
+// sheet iframe (which owns all Pixel logic) via postMessage commands.
+function sendCommandToSheetIframes(command) {
+    document.querySelectorAll("iframe[src*='view=vtt']").forEach((frame) => {
+        try {
+            frame.contentWindow.postMessage({ source: "pixels-dndbeyond", type: "command", command: command }, window.location.origin);
+        } catch {}
+    });
+}
+
+let pixelsLastStatusAt = 0;
+
+function addMapPixelsUI() {
+    if (document.querySelector("#pixels-map-ui")) return true;
+    const rightButtons = document.querySelector("[data-testid='quick-journal-button']")?.parentElement;
+    if (!rightButtons) return false;
+    if (!document.getElementById("pixels-map-ui-style")) {
+        const style = document.createElement("style");
+        style.id = "pixels-map-ui-style";
+        style.textContent = "#pixels-map-ui { display: flex; gap: 8px; margin-right: 8px; } #pixels-map-ui button { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 4px; background: rgba(18, 24, 28, 0.9); border: 1px solid rgba(236, 237, 238, 0.2); color: #ecedee; font-family: 'Roboto', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; } #pixels-map-ui button:hover { border-color: rgba(236, 237, 238, 0.5); } #pixels-map-pixelmode.pixels-map-active { background: #c53131; border-color: #c53131; } #pixels-map-connect { position: relative; } #pixels-map-connect .pixels-map-count { display: none; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #4caf50; color: white; font-size: 11px; font-weight: 700; letter-spacing: 0; }";
+        document.head.appendChild(style);
     }
-}, 500);
-navigation.addEventListener("navigate", (event) => {
-    lastURL = currentURL;
-    currentURL = event.destination.url;
-    console.log("Navigated");
-    if (checkIfNavigatedToEncounterBuilder()) {
-        alreadyNavigated = true;
-        pixelMode = false;
-        main();
-        console.log("Navigated to Encounter Builder");
-    } else {
-        alreadyNavigated = false;
+    const container = document.createElement("div");
+    container.id = "pixels-map-ui";
+    container.innerHTML = '<button id="pixels-map-pixelmode" title="Toggle Pixel Mode (rolls are then taken over by your Pixel dice)"><img src="https://raw.githubusercontent.com/carrierfry/pixels-dndbeyond-userscript/main/img/white.png" width="14" height="14" alt=""><span>Pixel Mode</span></button><button id="pixels-map-connect" title="Connect your Pixel dice"><span>Connect to Pixels</span><span class="pixels-map-count"></span></button>';
+    rightButtons.insertBefore(container, rightButtons.firstChild);
+    document.querySelector("#pixels-map-pixelmode").onclick = () => {
+        if (document.querySelectorAll("iframe[src*='view=vtt']").length > 0) {
+            sendCommandToSheetIframes("togglePixelMode");
+        } else {
+            showMapHint("Open a character sheet from the sidebar to roll with Pixels");
+        }
+    };
+    document.querySelector("#pixels-map-connect").onclick = () => {
+        if (document.querySelectorAll("iframe[src*='view=vtt']").length > 0) {
+            sendCommandToSheetIframes("connectPixel");
+        } else {
+            // no sheet iframe open: pair the die from the map frame itself; the
+            // permission is stored for the origin, so the sheet's auto-connect
+            // picks the die up once a sheet is opened
+            requestMyPixel().catch(() => showMapHint("Could not connect a Pixel die"));
+        }
+    };
+    sendCommandToSheetIframes("getStatus");
+    setInterval(() => {
+        if (document.querySelectorAll("iframe[src*='view=vtt']").length > 0) {
+            sendCommandToSheetIframes("getStatus");
+            if (Date.now() - pixelsLastStatusAt > 7000) {
+                updateMapPixelsUI({ pixelMode: false });
+            }
+        } else {
+            updateMapPixelsUI({ pixelMode: false, diceCount: Array.isArray(window.pixels) ? window.pixels.length : 0 });
+        }
+    }, 3000);
+    return true;
+}
+
+function updateMapPixelsUI(status) {
+    const pixelModeButton = document.querySelector("#pixels-map-pixelmode");
+    const connectButton = document.querySelector("#pixels-map-connect");
+    if (!pixelModeButton || !connectButton) return;
+    if (typeof status.pixelMode === "boolean") {
+        pixelModeButton.classList.toggle("pixels-map-active", status.pixelMode);
+    }
+    if (typeof status.diceCount === "number") {
+        const badge = connectButton.querySelector(".pixels-map-count");
+        if (badge) {
+            badge.textContent = status.diceCount > 0 ? String(status.diceCount) : "";
+            badge.style.display = status.diceCount > 0 ? "flex" : "none";
+        }
+    }
+}
+
+function showMapHint(text) {
+    const existing = document.querySelector("[data-pixels-map-popup]");
+    if (existing) existing.remove();
+    const popup = document.createElement("div");
+    popup.setAttribute("data-pixels-map-popup", "");
+    popup.textContent = text;
+    document.body.appendChild(popup);
+    popup.style.right = "20px";
+    popup.style.bottom = "70px";
+    setTimeout(() => {
+        popup.remove();
+    }, 4000);
+}
+
+// Pixel rolls made in the sheet iframe arrive here while the maps game log
+// panel may be closed; entries queue up and are injected once it is open
+// (and re-injected if the panel re-renders and drops them).
+let mapGamelogQueue = [];
+let mapLogObservedList = null;
+
+// the log list renders with flex-direction: column-reverse, so the chronologically
+// newest entry must be the DOM-first child; DDB appends its own live entries at
+// the DOM end (visually above older rolls), so move them up like the character
+// sheet game log observer does
+const mapLogObserver = new MutationObserver((mutationList) => {
+    const list = getMapGamelogList();
+    if (list === null) return;
+    const candidates = [];
+    for (const mutation of mutationList) {
+        for (const addedNode of mutation.addedNodes) {
+            if (addedNode.nodeType === 1 && addedNode.getAttribute && addedNode.getAttribute("data-testid") === "gameLogListItem" && !(addedNode.id || "").startsWith("pixels-gamelog-entry-") && !addedNode.classList.contains("pixels-reordered-entry")) {
+                candidates.push(addedNode);
+            }
+        }
+    }
+    // a single mutation batch with many entries is the history (re)render on
+    // log open or scroll; reordering those would reverse the whole list
+    if (candidates.length === 0 || candidates.length > 2) return;
+    for (const addedNode of candidates) {
+        setTimeout(() => {
+            if (addedNode.parentElement === list && list.firstElementChild !== addedNode) {
+                addedNode.classList.add("pixels-reordered-entry");
+                list.prepend(addedNode);
+                const container = document.querySelector("[class*='messagesContainer']");
+                if (container) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            }
+        }, 100);
     }
 });
 
+function checkForOpenMapGameLog() {
+    if (mapGamelogQueue.length === 0) return;
+    const list = getMapGamelogList();
+    if (list === null) {
+        mapLogObservedList = null;
+        return;
+    }
+    if (list !== mapLogObservedList) {
+        mapLogObserver.disconnect();
+        mapLogObserver.observe(list, { childList: true });
+        mapLogObservedList = list;
+    }
+    for (const json of mapGamelogQueue) {
+        const el = document.getElementById("pixels-gamelog-entry-" + json.data.rollId);
+        if (el === null) {
+            appendMapGamelogEntry(json, list);
+        } else {
+            const timeEl = el.querySelector("p[class*='__time']");
+            if (timeEl) {
+                timeEl.textContent = getRelativeTimeAgo(json.dateTime);
+            }
+        }
+    }
+}
+
+function getMapEntryAgeFromText(text) {
+    if (!text) return null;
+    const trimmed = text.trim();
+    if (trimmed === "just now") return 0;
+    const match = trimmed.match(/^(\d+)\s+(second|minute|hour|day)s?\s+ago$/);
+    if (!match) return null;
+    const multipliers = { "second": 1000, "minute": 60000, "hour": 3600000, "day": 86400000 };
+    return parseInt(match[1]) * multipliers[match[2]];
+}
+
+function getMapGamelogList() {
+    return document.querySelector("[data-testid='gameLogListItem']")?.parentElement
+        || document.querySelector("[class*='messagesContainer'] ol")
+        || null;
+}
+
+function getGameLogMessageCssHash() {
+    const sample = document.querySelector("[class*='GameLogMessage-module__']");
+    if (sample) {
+        const match = sample.className.match(/GameLogMessage-module__([\w-]+)__/);
+        if (match) return match[1];
+    }
+    for (const stylesheet of document.styleSheets) {
+        let rules;
+        try {
+            rules = stylesheet.cssRules;
+        } catch {
+            continue;
+        }
+        for (const rule of rules) {
+            const match = rule.selectorText && rule.selectorText.match(/GameLogMessage-module__([\w-]+)__/);
+            if (match) return match[1];
+        }
+    }
+    return null;
+}
+
+function getRelativeTimeAgo(dateTime) {
+    const minutes = Math.max(0, Math.floor((Date.now() - dateTime) / 60000));
+    if (minutes < 1) return "just now";
+    if (minutes === 1) return "1 minute ago";
+    if (minutes < 60) return minutes + " minutes ago";
+    const hours = Math.floor(minutes / 60);
+    if (hours === 1) return "1 hour ago";
+    if (hours < 24) return hours + " hours ago";
+    const days = Math.floor(hours / 24);
+    return days === 1 ? "1 day ago" : days + " days ago";
+}
+
+function appendMapGamelogEntry(json, list) {
+    const hash = getGameLogMessageCssHash();
+    if (hash === null) return;
+    const roll = json.data.rolls[json.data.rolls.length - 1];
+    const gm = "GameLogMessage-module__" + hash + "__";
+    const st = "styles-module__yLy3IW__";
+    const rollTypeClassLookup = { "check": "check", "save": "save", "roll": "roll", "to hit": "roll", "damage": "damage" };
+    const rollTypeClass = gm + (rollTypeClassLookup[roll.rollType] || "roll");
+    const li = document.createElement("li");
+    li.id = "pixels-gamelog-entry-" + json.data.rollId;
+    li.setAttribute("data-testid", "gameLogListItem");
+    li.className = st + "listItem " + st + "self";
+    li.innerHTML = '<div class="' + gm + 'container ' + gm + 'containerTime"><p class="' + gm + 'name"></p><div class="' + gm + 'rollContainerSelf ' + gm + 'rollContainerTime" tabindex="0"><div class="' + gm + 'rollWrapper"><span class="' + gm + 'actionContainer"><span class="' + gm + 'action" title=""></span>:<span class="' + gm + 'rollType ' + rollTypeClass + '"></span></span><div><p class="' + gm + 'breakdown"></p><p class="' + gm + 'notation"></p></div></div><span class="' + gm + 'rollResult ' + gm + 'rollResultTime"></span></div><p class="' + gm + 'time"></p></div>';
+    li.querySelector("p[class*='__name']").textContent = (json.data.context?.name || "Unknown").toUpperCase();
+    const actionContainer = li.querySelector("span[class*='__actionContainer']");
+    const actionSpan = actionContainer.querySelector("span[class*='__action']");
+    actionSpan.textContent = json.data.action || "custom";
+    const rollTypeSpan = actionContainer.querySelector("span[class*='__rollType']");
+    rollTypeSpan.textContent = roll.rollType || "roll";
+
+    const breakdown = li.querySelector("p[class*='__breakdown']");
+    const rollTakenSpans = roll.result.values.map((v) => '<span class="' + gm + 'rollTaken">' + v + "</span>");
+    if (roll.diceNotation.constant) {
+        rollTakenSpans.push('<span class="' + gm + 'rollTaken">' + roll.diceNotation.constant + "</span>");
+    }
+    breakdown.innerHTML = rollTakenSpans.join(" + ");
+    li.querySelector("p[class*='__notation']").textContent = roll.diceNotationStr;
+    li.querySelector("span[class*='__rollResult']").textContent = roll.result.total;
+    li.querySelector("p[class*='__time']").textContent = getRelativeTimeAgo(json.dateTime);
+    // the log lists newest entries first; slot the entry in at its chronological
+    // position instead of blindly prepending, so entries queued while the log
+    // was closed end up below native rolls made in the meantime
+    const ourAge = Math.max(0, Date.now() - json.dateTime);
+    let insertBefore = null;
+    for (const child of list.children) {
+        let age;
+        if (child.id && child.id.startsWith("pixels-gamelog-entry-")) {
+            const queued = mapGamelogQueue.find((q) => "pixels-gamelog-entry-" + q.data.rollId === child.id);
+            age = queued ? Math.max(0, Date.now() - queued.dateTime) : null;
+        } else {
+            age = getMapEntryAgeFromText(child.querySelector("p[class*='__time']")?.textContent);
+        }
+        if (age !== null && age > ourAge) {
+            insertBefore = child;
+            break;
+        }
+    }
+    if (insertBefore) {
+        list.insertBefore(li, insertBefore);
+    } else {
+        list.prepend(li);
+    }
+    const container = document.querySelector("[class*='messagesContainer']");
+    if (container) {
+        container.scrollTop = 0;
+    }
+}
+
+function sendPixelsStatusToParent() {
+    try {
+        window.parent.postMessage({ source: "pixels-dndbeyond", type: "status", pixelMode: pixelMode, diceCount: Array.isArray(window.pixels) ? window.pixels.length : 0 }, window.location.origin);
+    } catch {}
+}
+
+function handlePixelsCommand(command) {
+    if (command === "togglePixelMode") {
+        // the hidden sheet button toggles via its mouseup handler; button != 0
+        // means "permanent" mode instead of "only for the next roll"
+        document.querySelector("#pixel-mode-button")?.dispatchEvent(new MouseEvent("mouseup", { button: 2 }));
+        setTimeout(sendPixelsStatusToParent, 300);
+    } else if (command === "connectPixel") {
+        requestMyPixel();
+        setTimeout(sendPixelsStatusToParent, 2000);
+    } else if (command === "getStatus") {
+        sendPixelsStatusToParent();
+    }
+}
+
+// D&D Beyond's maps VTT renders a dice popup above the bottom-right toolbar for
+// its own virtual rolls; rolls arriving over the bridge bypass that renderer, so
+// we draw a lookalike anchored above the dice button.
+function showMapRollPopup(payload) {
+    let message;
+    try {
+        message = JSON.parse(payload);
+    } catch {
+        return;
+    }
+    if (!message || message.eventType !== "dice/roll/fulfilled" || !message.data || !Array.isArray(message.data.rolls) || message.data.rolls.length === 0) return;
+    const roll = message.data.rolls[message.data.rolls.length - 1];
+    if (!roll.result) return;
+    if (!document.getElementById("pixels-map-popup-style")) {
+        const style = document.createElement("style");
+        style.id = "pixels-map-popup-style";
+        style.textContent = "[data-pixels-map-popup] { position: fixed; z-index: 100000; background: rgba(18, 24, 28, 0.85); color: #ecedee; border-radius: 8px; padding: 16px 0 16px 16px; font-family: 'Roboto', sans-serif; pointer-events: none; } [data-pixels-map-popup] .pixels-map-popup-arrow { position: absolute; bottom: -5px; width: 12px; height: 12px; background: #12181c; transform: rotate(45deg); } [data-pixels-map-popup] .pixels-map-popup-name { font-size: 14px; font-weight: 500; line-height: 18px; } [data-pixels-map-popup] .pixels-map-popup-row { display: flex; align-items: center; } [data-pixels-map-popup] .pixels-map-popup-action { font-size: 16px; font-weight: 400; line-height: 24px; } [data-pixels-map-popup] .pixels-map-popup-rolltype { font-weight: 700; margin-left: 4px; text-transform: capitalize; } [data-pixels-map-popup] .pixels-map-popup-total { font-size: 24px; font-weight: 700; line-height: 24px; margin-left: 16px; padding: 0 32px; border-left: 1px solid rgba(236, 237, 238, 0.25); display: flex; align-items: center; }";
+        document.head.appendChild(style);
+    }
+    const existing = document.querySelector("[data-pixels-map-popup]");
+    if (existing) existing.remove();
+    const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+    const actionText = capitalize(message.data.action || "custom");
+    const nameRaw = (message.data.context && message.data.context.name) || "";
+    const nameText = nameRaw.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+    const popup = document.createElement("div");
+    popup.setAttribute("data-pixels-map-popup", "");
+    popup.innerHTML = '<div class="pixels-map-popup-name"></div><div class="pixels-map-popup-row"><div class="pixels-map-popup-action"></div><div class="pixels-map-popup-total"></div></div><div class="pixels-map-popup-arrow"></div>';
+    popup.querySelector(".pixels-map-popup-name").textContent = nameText;
+    const actionSpan = popup.querySelector(".pixels-map-popup-action");
+    actionSpan.append(actionText + ": ");
+    const rollTypeSpan = document.createElement("span");
+    rollTypeSpan.className = "pixels-map-popup-rolltype";
+    rollTypeSpan.textContent = roll.rollType || "roll";
+    actionSpan.append(rollTypeSpan);
+    popup.querySelector(".pixels-map-popup-rolltype").style.color = getRollTypeColor(roll.rollType || "roll");
+    popup.querySelector(".pixels-map-popup-total").textContent = roll.result.total;
+    document.body.appendChild(popup);
+    const anchor = document.querySelector("[data-testid='rollDiceButton']") || document.querySelector("[data-testid='bottomRightTools']");
+    if (anchor) {
+        const anchorRect = anchor.getBoundingClientRect();
+        const popupRect = popup.getBoundingClientRect();
+        popup.style.top = Math.round(anchorRect.top - popupRect.height - 20) + "px";
+        popup.style.right = Math.max(8, Math.round(window.innerWidth - anchorRect.right - 76)) + "px";
+        popup.querySelector(".pixels-map-popup-arrow").style.left = Math.max(16, Math.min(popupRect.width - 28, anchorRect.left + anchorRect.width / 2 - popupRect.left - 6)) + "px";
+    } else {
+        popup.style.right = "20px";
+        popup.style.bottom = "70px";
+    }
+    setTimeout(() => {
+        popup.remove();
+    }, 5000);
+}
 // Main function
 function main() {
+    isMapIframe = isVttSheetIframe();
     if (window.location.href.includes("games")) {
         isMap = true;
         if (!checkIfMapIsLoaded()) {
@@ -692,22 +1070,36 @@ function main() {
         }
     }
 
-    if ((!socket || socket.readyState !== 1) && socketRetryCount < 8) {
+    if (!isMapIframe && (!socket || socket.readyState !== 1) && socketRetryCount < 8) {
         console.log("socket not ready");
         setTimeout(main, 500);
         socketRetryCount++;
         return;
     }
 
-    if (navigator.bluetooth === undefined) {
+    if (!isMap && !isMapIframe && navigator.bluetooth === undefined) {
         alert("Bluetooth functionality is disabled in your Browser. Make sure the chrome flag chrome://flags/#enable-web-bluetooth-confirm-pairing-support is enabled!");
+        return;
+    }
+
+    if (isMap && !isMapIframe) {
+        // The map page itself only provides the game-log socket (used via the
+        // postMessage bridge); the sheet runs in the sidebar iframe and drives
+        // all Pixel logic from there. The Pixels controls live here in the map
+        // top bar and talk to the sheet iframe via postMessage.
+        checkForAutoConnect();
+        doneOnlyOnceStuff = true;
+        if (!addMapPixelsUI()) {
+            setTimeout(main, 500);
+        }
+        setInterval(checkForOpenMapGameLog, 500);
         return;
     }
 
     navigator.bluetooth.getAvailability().then(isBluetoothAvailable => {
         if (isBluetoothAvailable) {
             setTimeout(() => {
-                if (socket && socket.readyState === 1 && !isEncounterBuilder && !isMap) {
+                if (socket && socket.readyState === 1 && !isEncounterBuilder && !isMap && !isMapIframe) {
                     getCompleteCharacterData();
                 }
             }, 1000);
@@ -730,7 +1122,7 @@ function main() {
                 GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color:  ${color} !important; }`);
                 GM_addStyle(`.ct-character-header-desktop__group--pixels-not-available { cursor: default !important; background-color: darkgray !important; border-color: darkgray !important; }`);
                 GM_addStyle(`#red-pixel-icon { filter: brightness(30%) sepia(1) saturate(25); }`);
-            } else {
+            } else if (!isMapIframe) {
                 GM_addStyle(`.ct-character-header-desktop__group--pixels-active{ background-color: #1b9af0 !important; color: white !important; }`);
                 encounterBuilderAddEventListeners();
             }
@@ -1535,7 +1927,11 @@ function addPixelsLogoButton() {
         };
         button.appendChild(link);
 
-        if (!isMap) {
+        if (isMapIframe) {
+            // the map top bar hosts the connect button; the iframe only needs
+            // the Pixel logic, reached via postMessage commands
+            return;
+        } else if (!isMap) {
             // find the last mm-nav-item and insert after it
             let lastNavItem = document.querySelector("#mega-menu-target > header > div > div > nav > ul").children;
             link.className = document.querySelector("#mega-menu-target > header > div > div > nav > ul").lastChild.firstChild.className;;
@@ -1554,7 +1950,7 @@ function addPixelsLogoButton() {
 
 // The following 5 functions get different information from DOM elements and the URL
 function getCharacterId() {
-    let url = window.location.href;
+    let url = window.location.href.split("?")[0];
     let urlParts = url.split("/");
     let characterId = urlParts[urlParts.length - 1];
     return characterId;
@@ -1566,6 +1962,19 @@ function getCharacterName() {
         name = document.querySelector(".mon-stat-block__name");
     } else if (isMap) {
         return "Dungeon Master";
+    } else if (isMapIframe) {
+        // the vtt sheet iframe does not render the character name; read it
+        // from the sidebar panel header of the map page
+        name = document.querySelector("[class*='characterName']");
+        if (name === null) {
+            try {
+                name = window.parent.document.querySelector("aside[data-testid='sidebar'] h2[class*='heading']");
+            } catch (e) {}
+        }
+        if (name === null) {
+            return "Unknown Adventurer";
+        }
+        return name.innerText;
     } else {
         return document.querySelector("[class*='characterName']").innerText;
     }
@@ -1589,6 +1998,13 @@ function getGameId() {
         const match = url.match(/\/games\/(\d+)/);
         gameId = match[1];
         lastGameId = gameId;
+    } else if (isMapIframe) {
+        gameId = new URLSearchParams(window.location.search).get("gameId");
+        if (gameId === null) {
+            lastGameId = 0;
+        } else {
+            lastGameId = gameId;
+        }
     } else {
         if (!isMobileView && !isTabletView) {
             gameId = document.querySelector(".ddbc-tooltip").firstChild;
@@ -1606,8 +2022,16 @@ function getGameId() {
 }
 
 function getUserId() {
-    let userId = document.querySelector("#message-broker-client").getAttribute("data-userid");
-    return userId;
+    let broker = document.querySelector("#message-broker-client");
+    if (broker === null && window.parent !== window) {
+        try {
+            broker = window.parent.document.querySelector("#message-broker-client");
+        } catch (e) {}
+    }
+    if (broker !== null) {
+        return broker.getAttribute("data-userid");
+    }
+    return new URLSearchParams(window.location.search).get("userId");
 }
 
 function getAvatarUrl() {
@@ -1680,6 +2104,17 @@ function getCompleteCharacterData() {
 }
 
 // "Rolls" a die. You can specify the dice type and value and it will send the appropriate messages to the server.
+// In the maps VTT the sheet lives in an iframe without its own game-log socket;
+// rolls are handed to the top frame via postMessage (see the message listener
+// installed next to interceptSocket()).
+function sendRollMessage(jsonString) {
+    try {
+        window.parent.postMessage({ source: "pixels-dndbeyond", type: "roll", payload: jsonString }, window.location.origin);
+    } catch (e) {
+        console.log("could not forward roll to map frame: " + e.message);
+    }
+}
+
 function rollDice(realDieType, value) {
     let modifier = 0;
     let multiRollComplete = false;
@@ -1773,6 +2208,8 @@ function rollDice(realDieType, value) {
 
             if (socket && socket.readyState === 1) {
                 socket.send(JSON.stringify(initJson));
+            } else if (isMapIframe) {
+                sendRollMessage(JSON.stringify(initJson));
             }
 
             if (value === undefined) {
@@ -1795,6 +2232,10 @@ function rollDice(realDieType, value) {
                     // console.log("sending value: " + dieValue);
                     socket.send(JSON.stringify(rolledJson));
                 }, 1000);
+            } else if (isMapIframe) {
+                setTimeout(() => {
+                    sendRollMessage(JSON.stringify(rolledJson));
+                }, 1000);
             }
 
             if (Object.keys(currentlyExpectedRoll).length > 0 && (currentlyExpectedRoll.advantage || currentlyExpectedRoll.disadvantage)) {
@@ -1814,6 +2255,14 @@ function rollDice(realDieType, value) {
             createToast(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], modifier, rolledJson.data.rolls[0].diceNotationStr);
 
             createGameLogBubble(dieType, rolledJson.data.rolls[0].result.total, rolledJson.data.rolls[0].result.values[0], rolledJson);
+
+            if (isMapIframe) {
+                try {
+                    window.parent.postMessage({ source: "pixels-dndbeyond", type: "gamelog", payload: JSON.stringify(rolledJson) }, window.location.origin);
+                } catch (e) {
+                    console.log("could not forward game log entry to map frame: " + e.message);
+                }
+            }
 
             if (beyond20Installed && !beyond20OldMethod) {
                 sendRollToBeyond20(rolledJson);
@@ -1868,12 +2317,12 @@ function rollDice(realDieType, value) {
             }
             doubledAmount = false;
 
-            document.querySelector("#advButton").style.backgroundColor = "darkgray";
-            document.querySelector("#critButton").style.backgroundColor = "darkgray";
-            document.querySelector("#disadvButton").style.backgroundColor = "darkgray";
-            document.querySelector("#everyoneButton").style.backgroundColor = "darkgray";
-            document.querySelector("#selfButton").style.backgroundColor = "darkgray";
-            document.querySelector("#dmButton").style.backgroundColor = "darkgray";
+            document.querySelector("#advButton")?.style.setProperty("background-color", "darkgray");
+            document.querySelector("#critButton")?.style.setProperty("background-color", "darkgray");
+            document.querySelector("#disadvButton")?.style.setProperty("background-color", "darkgray");
+            document.querySelector("#everyoneButton")?.style.setProperty("background-color", "darkgray");
+            document.querySelector("#selfButton")?.style.setProperty("background-color", "darkgray");
+            document.querySelector("#dmButton")?.style.setProperty("background-color", "darkgray");
 
             nextAdvantageRoll = false;
             nextDisadvantageRoll = false;
@@ -1988,27 +2437,29 @@ async function handleConnection(pixel) {
 
     if (!containsObject(pixel, window.pixels)) {
 
-        pixel.addEventListener("roll", (face) => {
-            // console.log(`=> rolled face: ${face}`);
+        if (!(isMap && !isMapIframe)) {
+            pixel.addEventListener("roll", (face) => {
+                // console.log(`=> rolled face: ${face}`);
 
-            if (useCustomDebouncing && pixel.debounceTimeStart !== -1) {
-                if (pixel.debounceTimeEnd - pixel.debounceTimeStart < debounceThreshold) {
-                    // console.log((debounceTimeEnd - debounceTimeStart));
-                    // console.log("Roll too fast, ignoring...");
-                    pixel.stopAllAnimations();
-                    return;
+                if (useCustomDebouncing && pixel.debounceTimeStart !== -1) {
+                    if (pixel.debounceTimeEnd - pixel.debounceTimeStart < debounceThreshold) {
+                        // console.log((debounceTimeEnd - debounceTimeStart));
+                        // console.log("Roll too fast, ignoring...");
+                        pixel.stopAllAnimations();
+                        return;
+                    }
                 }
-            }
 
-            pixel.debounceTimeStart = -1;
-            pixel.debounceTimeEnd = -1;
-            // For now only D20, other dice in the future when I have my own dice and can explore the data structures :(
-            if (pixel.dieType === "d6pipped") {
-                rollDice("d6", face);
-            } else {
-                rollDice(pixel.dieType, face);
-            }
-        });
+                pixel.debounceTimeStart = -1;
+                pixel.debounceTimeEnd = -1;
+                // For now only D20, other dice in the future when I have my own dice and can explore the data structures :(
+                if (pixel.dieType === "d6pipped") {
+                    rollDice("d6", face);
+                } else {
+                    rollDice(pixel.dieType, face);
+                }
+            });
+        }
 
         pixel.addEventListener("rollState", (state) => {
             // console.log(`=> rollState: ${state}`);
@@ -2066,12 +2517,19 @@ async function handleConnection(pixel) {
         });
 
         window.pixels.push(pixel);
+        if (isMapIframe) {
+            sendPixelsStatusToParent();
+        } else if (isMap) {
+            updateMapPixelsUI({ diceCount: window.pixels.length });
+        }
     }
 
     addDieToTable(pixel);
     lightUpPixel(pixel, "connected");
-    document.querySelector(".pixels-info-box").style.display = "block";
-    updateCurrentPixels();
+    if (!(isMap && !isMapIframe)) {
+        document.querySelector(".pixels-info-box").style.display = "block";
+        updateCurrentPixels();
+    }
 
     if (!containsObject(pixel.systemId, systemIds) && !!navigator?.bluetooth?.getDevices) {
         systemIds.push(pixel.systemId);
@@ -2106,6 +2564,11 @@ function addPixelModeButton() {
         document.querySelector(".combat-tracker__header").appendChild(div);
     } else if (isMap) {
         document.querySelector("[class*='styles_scenarioMenuEncounters'").appendChild(div);
+    } else if (isMapIframe) {
+        // keep the full toggle handlers available for postMessage commands,
+        // but the visible control lives in the map top bar
+        div.style.display = "none";
+        document.querySelector(".ct-character-header-mobile__group--summary").appendChild(div);
     } else if (isTabletView) {
         document.querySelector(".ct-character-header-tablet__group--short-rest").parentNode.insertBefore(div, document.querySelector(".ct-character-header-tablet__group--short-rest"));
     } else if (isMobileView) {
@@ -2534,6 +2997,7 @@ function addDiceOverviewBox() {
 
 function addDieToTable(pixel) {
     let table = document.querySelector("#diceTable");
+    if (!table) return;
     let newRow = undefined;
     let onlyUpdate = false;
 
@@ -3740,7 +4204,7 @@ function checkIfCharacterSheetLoaded() {
 }
 
 function checkIfMapIsLoaded() {
-    if (document.querySelector("[data-testid='bottomRightTools'") !== null) {
+    if (document.querySelector("[data-testid='sidebar-button']") !== null) {
         return true;
     }
     return false;

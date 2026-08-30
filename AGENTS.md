@@ -21,18 +21,25 @@ It is shipped in two forms that share essentially the same logic:
 > URLs replaced by local `lib/*.js` files referenced from `manifest.json`.
 > When you change logic in one, change the other the same way. The version
 > strings in the userscript header, `manifest.json`, and any release commit
-> messages should also match (current: `1.0.4.1`).
+> messages should also match (current: `1.0.6.1`).
 
 Supported pages (from `@match` / manifest `matches`):
 - `https://www.dndbeyond.com/characters/*`
 - `https://www.dndbeyond.com/combat-tracker/*` (encounter builder)
 - `https://www.dndbeyond.com/encounters/*`, `/my-encounters*`, `/encounter-builder*`
-- `https://www.dndbeyond.com/games/*` (maps) — userscript only
+- `https://www.dndbeyond.com/games/*` (maps)
 
 Runtime is the page's MAIN world (the content script declares `"world":
 "MAIN"`, and the userscript runs in the page context via `@grant none`). It
 needs access to `window.WebSocket`, `navigator.bluetooth`, D&D Beyond's
-in-page globals, and the Beyond20 extension's `CustomEvent` bridge.
+in-page globals, and the Beyond20 extension's `CustomEvent` bridge. On the
+maps VTT the sheet is a same-origin iframe
+(`/characters/<id>?view=vtt&gameId=...`): the content script declares
+`"all_frames": true` (Tampermonkey injects into iframes by default) and only
+activates in frames that are the top window or such a sheet iframe
+(`runInFrame` gate). The iframe has no game-log socket of its own — its rolls
+are forwarded to the top frame (which owns the socket) via a `postMessage`
+bridge (see "Maps VTT architecture" below).
 
 ## 2. Repository layout
 
@@ -49,7 +56,12 @@ documentation/img/           # screenshots referenced by README.md
 guides/mobile.md             # mobile install guide
 img/                         # white pixel icon used in the Pixel Mode button
 test/
-  smoke.js                   # Playwright smoke test against live dndbeyond.com
+  smoke.js                   # Playwright smoke test (character sheet) against live dndbeyond.com
+  smoke-map.js               # Playwright smoke test (maps VTT) against live dndbeyond.com
+  explore-map.js             # manual E2E explorer for the map flow (sheet iframe via sidebar)
+  probe-map-roll.js          # map roll/popup/game-log probe (rewritten per investigation)
+  debug-bridge.js            # bridge/context debug script
+  debug-selectors.js         # map game log DOM/debug script
   package.json               # only dependency: playwright
   README.md                  # how to set up cookies + DDB_CHARACTER_URL
   cookies.json (gitignored)  # required session input
@@ -133,6 +145,53 @@ When Pixel Mode is enabled, `addPixelModeButton()` clones every
 Right-click / context menu is handled separately by `addRollWithPixelButton()`
 and `handleRightClick()`. `checkIfDiceButtonCanBeSwappedAgain()` re-swaps
 buttons when D&D Beyond re-renders them.
+
+### Maps VTT architecture
+The map page (top frame) and the sheet iframe split the work and talk over
+`postMessage` (all messages `{source: "pixels-dndbeyond", type, ...}`, same-origin):
+
+| Type | Direction | Payload / effect |
+| --- | --- | --- |
+| `roll` | iframe → top | JSON string of a `dice/roll/*` message; top sends it over the game-log socket and shows the dice popup |
+| `gamelog` | iframe → top | JSON string of the fulfilled roll; queued + injected into the map game log panel |
+| `command` | top → iframe | `togglePixelMode` / `connectPixel` / `getStatus` |
+| `status` | iframe → top | `{pixelMode, diceCount}`; drives the top bar buttons (3 s poll, stale reset after 7 s) |
+
+- **Top frame (`isMap && !isMapIframe`):** `main()` early-exits after
+  `checkForAutoConnect()` (must run *before* `doneOnlyOnceStuff = true`) and
+  `addMapPixelsUI()`. It owns the game-log socket, injects `#pixels-map-ui`
+  (Pixel Mode toggle + Connect button, with a green dice-count badge) before
+  `[data-testid='quick-journal-button']`, renders the dice popup
+  (`showMapRollPopup`, a lookalike of DDB's `gameLogToast` anchored above
+  `[data-testid='rollDiceButton']`), and injects Pixel rolls into the map
+  game log panel (`appendMapGamelogEntry` / `checkForOpenMapGameLog`). It
+  deliberately does **not** register die `"roll"` listeners — a physical roll
+  in the top frame would submit a context-less roll over the socket; rolling
+  happens only in the sheet iframe.
+- **Connect without an open sheet:** the top frame runs `requestMyPixel()`
+  itself (direct click = valid user activation). The BLE permission is
+  stored per origin, so the sheet iframe's `checkForAutoConnect()` picks the
+  die up once a sheet is opened. `handleConnection` /
+  `addDieToTable` must stay guarded against the top frame's missing DOM
+  (no info box, no dice table).
+- **Sheet iframe (`isMapIframe`):** full Pixel logic. The Pixel Mode button
+  is injected but `display: none`; the top bar toggles it by dispatching
+  `MouseEvent("mouseup", {button: 2})` (button != 0 = "permanent" mode,
+  button 0 = "only next roll"). The Connect link is not injected at all.
+  Pixel rolls are sent to the parent as both `roll` and `gamelog` messages.
+- **Map game log panel:** the list renders with `flex-direction:
+  column-reverse` — the chronologically newest entry must be the DOM-*first*
+  child (visually bottom), like the character sheet log after its observer
+  runs. Pixel rolls queue while the panel is closed
+  (`mapGamelogQueue`, max 50, deduped by rollId) and are injected at their
+  chronological position; the 500 ms poller re-adds entries React wipes and
+  refreshes our entries' relative time text (static "just now" reads as
+  wrong ordering). A second MutationObserver moves DDB's own live entries to
+  DOM-first (DDB appends them at the DOM end, which renders *above* older
+  rolls); batches of more than 2 nodes are history re-renders and are left
+  alone. Entry DOM is built with DDB's `GameLogMessage-module__*` classes —
+  the hash is discovered at runtime from existing entries or a stylesheet
+  scan, never hardcoded.
 
 ### Beyond20 bridge
 Optional interop with the Beyond20 extension. `checkIfBeyond20Installed()`
@@ -230,7 +289,12 @@ ordering in `manifest.json`.
 
 ## 6. Testing
 
-There is one test: the Playwright smoke test in `test/`.
+Two Playwright tests run against the live site: `test/smoke.js` (character
+sheet) and `test/smoke-map.js` (maps VTT). The other `test/*.js` files
+(`explore-map.js`, `probe-map-roll.js`, `debug-*.js`) are manual exploration
+probes, rewritten per investigation; they are committed because they encode
+hard-won DOM knowledge (sidebar → encounter list → open-character-sheet
+flow, retry loops for flaky map loads).
 
 ### Prerequisites (one-time, inside WSL/Ubuntu)
 ```bash
@@ -269,7 +333,8 @@ npx playwright install chromium
 ### Run
 ```bash
 cd test
-npm run smoke
+npm run smoke        # character sheet
+npm run smoke:map    # maps VTT (needs a character that is in a campaign with an active map)
 # or, to watch the browser:
 HEADED=1 DDB_CHARACTER_URL=https://www.dndbeyond.com/characters/<id> npm run smoke
 ```
@@ -301,6 +366,29 @@ On failure, screenshots + an HTML dump land in `test/artifacts/` (gitignored)
 so you can diff D&D Beyond's current DOM against the selectors the extension
 expects.
 
+### What smoke-map.js verifies (maps VTT)
+1. Map loads despite D&D Beyond's intermittent 500s ("Something went wrong"
+   → reload retry), top bar UI (`#pixels-map-ui`) is injected into
+   `div[class*='rightButtons']`.
+2. Sheet iframe opens via sidebar → encounter list → hover →
+   `open-character-sheet`; hidden `#pixel-mode-button` + info box present,
+   no Connect link in the header.
+3. Pixel Mode toggle via the top bar button flips `pixelMode` in the iframe
+   and the button's active class (status round-trip over postMessage).
+4. `rollDice("d20", 14)` in the iframe arrives as `dice/roll/pending` +
+   `dice/roll/fulfilled` on the top frame's game-log socket with correct
+   context (name, entityId, gameId, userId).
+5. Dice popup `[data-pixels-map-popup]` appears above
+   `[data-testid='rollDiceButton']` with character name + total.
+6. Game log injection: a roll while the panel is closed stays queued;
+   opening the panel flushes it to the DOM-first (visually bottom)
+   position; a simulated DDB live entry appended at the DOM end gets moved
+   to DOM-first by the observer.
+
+BLE pairing / real dice hardware is not testable headless — verify manually
+in a real browser (chooser opens from the map top bar with no sheet open;
+auto-connect fills the badge once a sheet is opened).
+
 There is no unit test runner and no linter configured for the content
 script. After non-trivial JS edits, at minimum load the userscript in
 Tampermonkey / the extension in a Chromium browser and confirm the Pixel
@@ -326,6 +414,25 @@ lands in the game log.
 - **Live site drift.** D&D Beyond changes DOM and obfuscated class names
   frequently. When a selector breaks, check `test/artifacts/` and update
   the `[class*='…']` substring matchers in both entry points.
+- **Substring class selectors can match containers.**
+  `querySelector("span[class*='__action']")` hits the outer
+  `__actionContainer` span first; assigning `textContent` to it destroys its
+  child spans. Scope queries inside the container
+  (`container.querySelector("span[class*='__action']")`) or match more
+  precisely.
+- **Maps VTT: the game log list renders `column-reverse`.** The
+  chronologically newest entry must be the DOM-*first* child (it displays at
+  the visual bottom). DDB appends its own live entries at the DOM end, which
+  puts them *above* older rolls — the map log observer moves them to
+  DOM-first. Never evaluate ordering from DOM position without accounting
+  for the reversal, and keep our entries' relative time text refreshed
+  (static "just now" reads as wrong ordering).
+- **Maps VTT: CSS hashes are per-deployment.** `GameLogMessage-module__<hash>__`
+  changes when D&D Beyond redeploys; discover it at runtime from an existing
+  entry's className or a stylesheet scan (`getGameLogMessageCssHash()`).
+- **Maps VTT: map loads fail ~50% of the time** with D&D Beyond server 500s
+  ("Something went wrong" / "Error getting scenarios"). Tests must load a
+  character sheet first, then the map URL, and retry reloads on failure.
 - **WSL2 access from Windows.** This checkout lives at
   `/home/fabian/pixels-dndbeyond-userscript` inside the `Ubuntu-24.04` WSL
   distro. From PowerShell, invoke shell commands as

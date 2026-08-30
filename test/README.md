@@ -81,7 +81,8 @@ third-party extension, not part of this repo.
 ## Running
 
 ```bash
-npm run smoke
+npm run smoke        # character sheet
+npm run smoke:map    # maps VTT (needs a character in a campaign with an active map)
 ```
 
 Environment variables:
@@ -89,6 +90,7 @@ Environment variables:
 | Variable            | Default              | Meaning                                     |
 | ------------------- | -------------------- | ------------------------------------------- |
 | `DDB_CHARACTER_URL` | (required)           | Character sheet URL of the test character   |
+| `DDB_MAP_URL`       | (required for map)   | Map URL of a campaign the test account is in (`https://www.dndbeyond.com/games/<id>`) |
 | `DDB_COOKIES`       | `test/cookies.json`  | Path to the cookie dump                     |
 | `HEADED`            | unset                | Set to `1` to watch the browser             |
 
@@ -112,3 +114,10 @@ extension expects.
 
 Bluetooth is NOT exercised — `rollDice()` is called directly, which is the same
 entry point the real Pixels dice event listener uses.
+
+The map test (`smoke-map.js`) drives the whole maps VTT flow: map load with
+retry against D&D Beyond's intermittent 500s, top bar Pixels UI, the sheet
+iframe opened via the sidebar, Pixel Mode toggle round-trip over postMessage,
+bridge roll onto the game-log socket, the dice popup, and game log injection
+(queued while closed, flushed to the visually chronological position, live
+entries reordered by the observer).
